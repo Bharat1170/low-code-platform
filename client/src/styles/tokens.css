@@ -1,0 +1,23 @@
+/* Design tokens shared by the builder and the auth pages. */
+:root {
+  --builder-bg: #f6f7f9;
+  --builder-surface: #ffffff;
+  --builder-surface-hover: #f9fafb;
+  --builder-border: #e4e7ec;
+  --builder-border-strong: #cfd4dc;
+  --builder-text: #101828;
+  --builder-muted: #667085;
+  --builder-primary: #1d2433;
+  --builder-primary-hover: #2c3547;
+  --builder-primary-soft: #eef1ff;
+  --builder-accent: #4f5bd5;
+  --builder-danger: #b42318;
+  --builder-danger-soft: #fee4e2;
+  --builder-radius: 10px;
+  --builder-radius-sm: 8px;
+  --builder-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --builder-shadow-hover: 0 2px 6px rgba(16, 24, 40, 0.07);
+  --builder-focus: 0 0 0 3px rgba(79, 91, 213, 0.28);
+  --builder-transition: 120ms ease;
+
+}

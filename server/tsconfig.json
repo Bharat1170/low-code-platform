@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", // gives js latest features 
+    "module": "NodeNext", // for node behaviour and support for ES modules
+    "moduleResolution": "NodeNext", // for node behaviour and support for ES modules
+
+    "rootDir": "src",
+    "outDir": "dist",
+
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    "forceConsistentCasingInFileNames": true,
+
+    "skipLibCheck": true,
+
+    "resolveJsonModule": true,
+
+    "sourceMap": true,
+    "declaration": true,
+
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    "types": [
+      "node"
+    ]
+  },
+
+  "include": [
+    "src/**/*.ts"
+  ],
+
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests"
+  ]
+}
