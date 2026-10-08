@@ -7,6 +7,7 @@ import { findFormVersionById } from "../repositories/form-version.repository.js"
 import {
   countSubmissions,
   createFormSubmission,
+  deleteSubmissionById,
   findSubmissionById,
   listSubmissions,
   type SubmissionListFilter,
@@ -322,4 +323,70 @@ export const getFormSubmission = async (
     submittedAt: submission.submittedAt.toISOString(),
     schema: version ? structuredClone(version.schemaSnapshot) : null,
   };
+};
+
+/* ---------- Deleting a submission ---------- */
+
+/*
+ * Hard delete. The submission and its audit event commit together; the
+ * audit event records identifiers only, never the submitted values. A
+ * submission of another tenant or another form is reported as 404.
+ */
+export const deleteFormSubmission = async (
+  auth: AuthContext,
+  formId: string,
+  submissionId: string,
+  context: SubmissionContext,
+): Promise<void> => {
+  const organizationId = new mongoose.Types.ObjectId(auth.organizationId);
+  const userId = new mongoose.Types.ObjectId(auth.userId);
+  const id = new mongoose.Types.ObjectId(formId);
+  const targetId = new mongoose.Types.ObjectId(submissionId);
+
+  await requireOwnForm(organizationId, id);
+
+  const dbSession = await mongoose.startSession();
+  let deleted = false;
+
+  try {
+    await dbSession.withTransaction(async () => {
+      const removed = await deleteSubmissionById(
+        organizationId,
+        id,
+        targetId,
+        dbSession,
+      );
+
+      deleted = removed !== null;
+
+      if (!removed) {
+        return;
+      }
+
+      await createAuditLog(
+        {
+          organizationId,
+          userId,
+          action: AUDIT_ACTIONS.SUBMISSION_DELETED,
+          resourceType: "FORM_SUBMISSION",
+          resourceId: removed._id,
+          metadata: {
+            formId: id.toString(),
+            formVersionId: removed.formVersionId.toString(),
+            version: removed.version,
+            submissionId: removed._id.toString(),
+          },
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+        },
+        dbSession,
+      );
+    });
+  } finally {
+    await dbSession.endSession();
+  }
+
+  if (!deleted) {
+    throw new AppError(404, "SUBMISSION_NOT_FOUND", "Submission not found");
+  }
 };

@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 
 import { getAuthContext } from "../middleware/auth.middleware.js";
 import {
+  deleteFormSubmission as deleteFormSubmissionService,
   getFormSubmission as getFormSubmissionService,
   listFormSubmissions as listFormSubmissionsService,
   submitForm as submitFormService,
@@ -60,4 +61,20 @@ export const getSubmission = async (
   const submission = await getFormSubmissionService(auth, id, submissionId);
 
   sendSuccess(res, 200, "Submission retrieved successfully", { submission });
+};
+
+export const deleteSubmission = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const auth = getAuthContext(req);
+
+  const { id, submissionId } = submissionIdParamSchema.parse(req.params);
+
+  await deleteFormSubmissionService(auth, id, submissionId, {
+    ipAddress: req.ip ?? "unknown",
+    userAgent: (req.get("user-agent") ?? "unknown").slice(0, 1000),
+  });
+
+  sendSuccess(res, 200, "Submission deleted successfully");
 };

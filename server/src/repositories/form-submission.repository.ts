@@ -118,6 +118,27 @@ export const findSubmissionById = async (
   }).exec();
 };
 
+/*
+ * Hard delete, scoped by organization AND form like every other query.
+ * Returns the deleted document (so the caller can audit it), or null when
+ * nothing matched.
+ */
+export const deleteSubmissionById = async (
+  organizationId: mongoose.Types.ObjectId,
+  formId: mongoose.Types.ObjectId,
+  submissionId: mongoose.Types.ObjectId,
+  dbSession?: ClientSession,
+): Promise<IFormSubmission | null> => {
+  return FormSubmission.findOneAndDelete(
+    {
+      _id: safeObjectId(submissionId),
+      organizationId: safeObjectId(organizationId),
+      formId: safeObjectId(formId),
+    },
+    { session: dbSession },
+  ).exec();
+};
+
 export const createFormSubmission = async (
   organizationId: mongoose.Types.ObjectId,
   input: CreateFormSubmissionData,

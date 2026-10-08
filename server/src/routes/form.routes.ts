@@ -12,6 +12,7 @@ import {
 } from "../controllers/form.controller.js";
 
 import {
+  deleteSubmission,
   getSubmission,
   listSubmissions,
   submitForm,
@@ -101,6 +102,14 @@ router.get(
   requireActiveAccount,
   requirePermission(PERMISSIONS.SUBMISSION_READ),
   getSubmission,
+);
+
+router.delete(
+  "/:id/submissions/:submissionId",
+  authenticate,
+  requireActiveAccount,
+  requirePermission(PERMISSIONS.SUBMISSION_DELETE),
+  deleteSubmission,
 );
 
 // Submits data against the form's CURRENT published version.
