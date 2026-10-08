@@ -47,7 +47,9 @@ const envSchema = z.object({
   CLIENT_URL: z
     .string()
     .trim()
-    .url("CLIENT_URL must be a valid URL"),
+    .url("CLIENT_URL must be a valid URL")
+    // CORS compares origins exactly; "https://app.example/" never matches.
+    .transform((value) => value.replace(/\/+$/, "")),
 
   EMAIL_HOST: z
     .string()
