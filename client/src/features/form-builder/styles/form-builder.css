@@ -52,6 +52,17 @@
   font-weight: 500;
 }
 
+/* "Forms" breadcrumb when it links to the forms list. */
+.fb-breadcrumb-link {
+  text-decoration: none;
+}
+
+.fb-breadcrumb-link:hover,
+.fb-breadcrumb-link:focus-visible {
+  color: var(--builder-text);
+  text-decoration: underline;
+}
+
 .fb-breadcrumb-sep {
   color: var(--builder-border-strong);
 }

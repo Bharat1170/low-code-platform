@@ -208,6 +208,54 @@ export const submitForm = async (
 
 /* ---------- Creating the form being edited ---------- */
 
+/* One row of GET /forms (the server never includes the draft here). */
+export interface FormSummary {
+  id: string;
+  name: string;
+  status: string;
+  hasPublishedVersion: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const MAX_FORMS_PAGE_SIZE = 100;
+
+/*
+ * The signed-in organization's forms, newest first. The organization comes
+ * from the session on the server; nothing here selects it.
+ */
+export const listForms = async (
+  { limit = MAX_FORMS_PAGE_SIZE, skip = 0 }: { limit?: number; skip?: number } = {},
+): Promise<FormSummary[]> => {
+  const query = new URLSearchParams({ limit: String(limit), skip: String(skip) });
+  const body = await authorizedRequest(`/forms?${query.toString()}`);
+  const forms =
+    isRecord(body) && isRecord(body.data) && Array.isArray(body.data.forms)
+      ? body.data.forms
+      : null;
+
+  if (forms === null) {
+    throw new ApiError(500, "INVALID_RESPONSE", "Unexpected server response");
+  }
+
+  return forms.filter(isRecord).flatMap((form): FormSummary[] =>
+    typeof form._id === "string"
+      ? [
+          {
+            id: form._id,
+            name: typeof form.name === "string" ? form.name : "",
+            status: typeof form.status === "string" ? form.status : "",
+            hasPublishedVersion:
+              typeof form.publishedVersionId === "string" &&
+              form.publishedVersionId !== "",
+            createdAt: typeof form.createdAt === "string" ? form.createdAt : "",
+            updatedAt: typeof form.updatedAt === "string" ? form.updatedAt : "",
+          },
+        ]
+      : [],
+  );
+};
+
 const idOf = (value: unknown): string | null =>
   isRecord(value) && typeof value._id === "string" ? value._id : null;
 

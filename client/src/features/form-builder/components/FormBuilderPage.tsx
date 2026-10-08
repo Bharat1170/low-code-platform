@@ -10,6 +10,7 @@ import "../styles/form-builder.css";
 interface FormBuilderPageProps {
   formId: string;
   headerExtras?: ReactNode;
+  formsLink?: ReactNode;
 }
 
 type LoadState =
@@ -41,6 +42,7 @@ const errorMessage = (error: unknown): string => {
 export function FormBuilderPage({
   formId,
   headerExtras,
+  formsLink,
 }: FormBuilderPageProps) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
 
@@ -92,6 +94,7 @@ export function FormBuilderPage({
         initiallyPublished={state.published}
         initialStatus={state.status}
         headerExtras={headerExtras}
+        formsLink={formsLink}
       />
     );
   }

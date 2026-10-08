@@ -11,6 +11,7 @@ import { DraftPreviewPage } from "./features/form-renderer/components/DraftPrevi
 import { SubmissionDetailsPage } from "./features/submissions/pages/SubmissionDetailsPage.tsx";
 import { SubmissionsPage } from "./features/submissions/pages/SubmissionsPage.tsx";
 import { FormBuilderPage } from "./features/form-builder/components/FormBuilderPage.tsx";
+import { FormsPage } from "./features/forms/pages/FormsPage.tsx";
 
 /*
  * The form to edit is chosen with ?formId=<id>. Without it the builder
@@ -36,9 +37,19 @@ function BuilderRoute() {
       <AccountMenu />
     </>
   );
+  const formsLink = (
+    <Link className="fb-breadcrumb fb-breadcrumb-link" to="/forms">
+      Forms
+    </Link>
+  );
 
   return urlFormId ? (
-    <FormBuilderPage key={urlFormId} formId={urlFormId} headerExtras={account} />
+    <FormBuilderPage
+      key={urlFormId}
+      formId={urlFormId}
+      headerExtras={account}
+      formsLink={formsLink}
+    />
   ) : (
     <FormBuilder
       createForm={createDraftForm}
@@ -52,6 +63,7 @@ function BuilderRoute() {
         );
       }}
       headerExtras={account}
+      formsLink={formsLink}
     />
   );
 }
@@ -65,6 +77,7 @@ function App() {
       </Route>
       <Route element={<RequireAuth />}>
         <Route path="/" element={<BuilderRoute />} />
+        <Route path="/forms" element={<FormsPage />} />
         <Route path="/forms/:formId/preview" element={<DraftPreviewPage />} />
         <Route path="/forms/:formId/submissions" element={<SubmissionsPage />} />
         <Route

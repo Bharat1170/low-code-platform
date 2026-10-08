@@ -46,6 +46,8 @@ interface FormBuilderProps {
   openPreviewWindow?: () => PreviewWindow | null;
   /* Extra controls (e.g. the account menu) shown at the end of the header. */
   headerExtras?: ReactNode;
+  /* Replaces the plain "Forms" breadcrumb, e.g. with a link to the forms list. */
+  formsLink?: ReactNode;
 }
 
 export function FormBuilder({
@@ -59,6 +61,7 @@ export function FormBuilder({
   onFormCreated,
   openPreviewWindow,
   headerExtras,
+  formsLink,
 }: FormBuilderProps) {
   const [schema, setSchema] = useState<FormSchema>(
     () => initialSchema ?? createEmptyFormSchema(),
@@ -134,7 +137,7 @@ export function FormBuilder({
       <header className="fb-header">
         <div className="fb-header-left">
           <span className="fb-logo" aria-hidden="true" />
-          <span className="fb-breadcrumb">Forms</span>
+          {formsLink ?? <span className="fb-breadcrumb">Forms</span>}
           <span className="fb-breadcrumb-sep" aria-hidden="true">
             /
           </span>
