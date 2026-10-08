@@ -2,23 +2,32 @@ import mongoose from "mongoose";
 
 import { AUDIT_ACTIONS } from "../constants/audit-actions.js";
 import { createAuditLog } from "../repositories/audit-log.repository.js";
-import { findFormByIdAndOrganization } from "../repositories/form.repository.js";
-import { findFormVersionById } from "../repositories/form-version.repository.js";
+import {
+  findFormByIdAndOrganization,
+  findFormByPublicId,
+} from "../repositories/form.repository.js";
+import {
+  findFormVersionById,
+  findFormVersionsByIds,
+} from "../repositories/form-version.repository.js";
 import {
   countSubmissions,
   createFormSubmission,
   deleteSubmissionById,
   findSubmissionById,
   listSubmissions,
+  listSubmissionsForExport,
   type SubmissionListFilter,
 } from "../repositories/form-submission.repository.js";
 import { findUserNamesByIdsForOrganization } from "../repositories/user.repository.js";
 import type { AuthContext } from "../types/auth.types.js";
+import { toCsv } from "../utils/csv.util.js";
 import { AppError } from "../utils/errors.js";
 import { validateSubmissionData } from "../utils/form-submission-validation.util.js";
 import {
   MAX_SUBMISSION_BYTES,
   type CreateSubmissionInput,
+  type SubmissionData,
 } from "../validators/form-submission.validator.js";
 import {
   DATE_ONLY,
@@ -56,15 +65,18 @@ export interface SubmissionResult {
 const notPublished = (): AppError =>
   new AppError(404, "FORM_NOT_PUBLISHED", "This form has not been published");
 
-export const submitForm = async (
-  auth: AuthContext,
-  formId: string,
+/*
+ * The one submission path. organizationId and formId are already
+ * resolved by the caller from server-side state (the session, or the
+ * form a publicId points to); userId is null for an anonymous submitter.
+ */
+const submitToForm = async (
+  organizationId: mongoose.Types.ObjectId,
+  id: mongoose.Types.ObjectId,
+  userId: mongoose.Types.ObjectId | null,
   input: CreateSubmissionInput,
   context: SubmissionContext,
 ): Promise<SubmissionResult> => {
-  const organizationId = new mongoose.Types.ObjectId(auth.organizationId);
-  const userId = new mongoose.Types.ObjectId(auth.userId);
-  const id = new mongoose.Types.ObjectId(formId);
 
   if (Buffer.byteLength(JSON.stringify(input.data), "utf8") > MAX_SUBMISSION_BYTES) {
     throw new AppError(
@@ -164,6 +176,70 @@ export const submitForm = async (
   return result;
 };
 
+export const submitForm = async (
+  auth: AuthContext,
+  formId: string,
+  input: CreateSubmissionInput,
+  context: SubmissionContext,
+): Promise<SubmissionResult> =>
+  submitToForm(
+    new mongoose.Types.ObjectId(auth.organizationId),
+    new mongoose.Types.ObjectId(formId),
+    new mongoose.Types.ObjectId(auth.userId),
+    input,
+    context,
+  );
+
+/* What an anonymous respondent learns: that it worked, and when. */
+export interface PublicSubmissionResult {
+  submittedAt: string;
+}
+
+/*
+ * Anonymous submission through a share link. The publicId is the only
+ * input that selects the form; organization, form, version and submitter
+ * are all derived here, never read from the request. Unknown, archived
+ * and unpublished forms are indistinguishable (404).
+ */
+export const submitPublicForm = async (
+  publicId: string,
+  input: CreateSubmissionInput,
+  context: SubmissionContext,
+): Promise<PublicSubmissionResult> => {
+  if (Buffer.byteLength(JSON.stringify(input.data), "utf8") > MAX_SUBMISSION_BYTES) {
+    throw new AppError(413, "SUBMISSION_TOO_LARGE", "The submission is too large");
+  }
+
+  const form = await findFormByPublicId(publicId);
+
+  if (!form || form.status === "ARCHIVED" || !form.publishedVersionId) {
+    throw publicFormNotFound();
+  }
+
+  try {
+    const result = await submitToForm(
+      form.organizationId,
+      form._id as mongoose.Types.ObjectId,
+      null,
+      input,
+      context,
+    );
+    return { submittedAt: result.submittedAt };
+  } catch (error) {
+    // Same answer for every way the form can be unavailable.
+    if (
+      error instanceof AppError &&
+      (error.code === "FORM_NOT_FOUND" || error.code === "FORM_NOT_PUBLISHED")
+    ) {
+      throw publicFormNotFound();
+    }
+    throw error;
+  }
+};
+
+export const publicFormNotFound = (): AppError =>
+  new AppError(404, "FORM_NOT_FOUND", "This form is not available");
+
 /* ---------- Reading submissions (8.17.16) ---------- */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -173,7 +249,8 @@ export interface SubmissionListItem {
   formId: string;
   formVersionId: string;
   version: number;
-  submittedBy: string;
+  /* Null for an anonymous (public link) submission. */
+  submittedBy: string | null;
   submittedByName: string | null;
   submittedAt: string;
 }
@@ -243,7 +320,11 @@ export const listFormSubmissions = async (
 
   const names = await findUserNamesByIdsForOrganization(
     organizationId,
-    [...new Set(rows.map((row) => row.submittedBy.toString()))].map(
+    [
+      ...new Set(
+        rows.flatMap((row) => (row.submittedBy ? [row.submittedBy.toString()] : [])),
+      ),
+    ].map(
       (userId) => new mongoose.Types.ObjectId(userId),
     ),
   );
@@ -254,8 +335,10 @@ export const listFormSubmissions = async (
       formId: row.formId.toString(),
       formVersionId: row.formVersionId.toString(),
       version: row.version,
-      submittedBy: row.submittedBy.toString(),
-      submittedByName: names.get(row.submittedBy.toString()) ?? null,
+      submittedBy: row.submittedBy ? row.submittedBy.toString() : null,
+      submittedByName: row.submittedBy
+        ? (names.get(row.submittedBy.toString()) ?? null)
+        : null,
       submittedAt: row.submittedAt.toISOString(),
     })),
     pagination: {
@@ -273,8 +356,8 @@ export interface SubmissionDetails {
   formName: string;
   formVersionId: string;
   version: number;
-  data: Record<string, string | boolean>;
-  submittedBy: string;
+  data: SubmissionData;
+  submittedBy: string | null;
   submittedByName: string | null;
   submittedAt: string;
   /*
@@ -308,7 +391,10 @@ export const getFormSubmission = async (
 
   const [version, names] = await Promise.all([
     findFormVersionById(submission.formVersionId, id, organizationId),
-    findUserNamesByIdsForOrganization(organizationId, [submission.submittedBy]),
+    findUserNamesByIdsForOrganization(
+      organizationId,
+      submission.submittedBy ? [submission.submittedBy] : [],
+    ),
   ]);
 
   return {
@@ -318,10 +404,133 @@ export const getFormSubmission = async (
     formVersionId: submission.formVersionId.toString(),
     version: submission.version,
     data: submission.data,
-    submittedBy: submission.submittedBy.toString(),
-    submittedByName: names.get(submission.submittedBy.toString()) ?? null,
+    submittedBy: submission.submittedBy ? submission.submittedBy.toString() : null,
+    submittedByName: submission.submittedBy
+      ? (names.get(submission.submittedBy.toString()) ?? null)
+      : null,
     submittedAt: submission.submittedAt.toISOString(),
     schema: version ? structuredClone(version.schemaSnapshot) : null,
+  };
+};
+
+/* ---------- Exporting submissions ---------- */
+
+export const MAX_EXPORT_ROWS = 10_000;
+
+export interface SubmissionExport {
+  filename: string;
+  csv: string;
+  /* More submissions exist than were exported. */
+  truncated: boolean;
+}
+
+const exportValue = (value: SubmissionData[string] | undefined): string => {
+  if (value === undefined) return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) return value.join("; ");
+  return value;
+};
+
+/*
+ * CSV of a form's submissions, newest first. Columns are the fields of
+ * every version the exported rows used (newest version's order first),
+ * labelled from those immutable versions, so renamed or removed fields of
+ * older versions are still exported. Values are never interpreted.
+ */
+export const exportFormSubmissions = async (
+  auth: AuthContext,
+  formId: string,
+  context: SubmissionContext,
+): Promise<SubmissionExport> => {
+  const organizationId = new mongoose.Types.ObjectId(auth.organizationId);
+  const id = new mongoose.Types.ObjectId(formId);
+
+  const form = await requireOwnForm(organizationId, id);
+
+  const rows = await listSubmissionsForExport(
+    organizationId,
+    id,
+    MAX_EXPORT_ROWS + 1,
+  );
+  const truncated = rows.length > MAX_EXPORT_ROWS;
+  const exported = truncated ? rows.slice(0, MAX_EXPORT_ROWS) : rows;
+
+  const versionIds = [
+    ...new Set(exported.map((row) => row.formVersionId.toString())),
+  ].map((value) => new mongoose.Types.ObjectId(value));
+
+  const submitterIds = [
+    ...new Set(
+      exported.flatMap((row) => (row.submittedBy ? [row.submittedBy.toString()] : [])),
+    ),
+  ].map((value) => new mongoose.Types.ObjectId(value));
+
+  const [versions, names] = await Promise.all([
+    findFormVersionsByIds(versionIds, id, organizationId),
+    findUserNamesByIdsForOrganization(organizationId, submitterIds),
+  ]);
+
+  // Field id -> label, in first-seen order across versions (newest first).
+  const columns = new Map<string, string>();
+  for (const version of versions) {
+    const fields = Array.isArray(version.schemaSnapshot?.fields)
+      ? (version.schemaSnapshot.fields as unknown[])
+      : [];
+
+    for (const field of fields) {
+      if (
+        typeof field === "object" &&
+        field !== null &&
+        typeof (field as { id?: unknown }).id === "string" &&
+        !columns.has((field as { id: string }).id)
+      ) {
+        const { id: fieldId, label } = field as { id: string; label?: unknown };
+        columns.set(
+          fieldId,
+          typeof label === "string" && label.trim() !== "" ? label.trim() : fieldId,
+        );
+      }
+    }
+  }
+
+  const fieldIds = [...columns.keys()];
+  const csv = toCsv([
+    ["Submitted at", "Version", "Submitted by", ...columns.values()],
+    ...exported.map((row) => [
+      row.submittedAt.toISOString(),
+      String(row.version),
+      row.submittedBy
+        ? (names.get(row.submittedBy.toString()) ?? "Unknown user")
+        : "Anonymous",
+      ...fieldIds.map((fieldId) =>
+        exportValue((row.data as SubmissionData)[fieldId]),
+      ),
+    ]),
+  ]);
+
+  // A bulk read of possibly sensitive answers: recorded, ids only.
+  await createAuditLog({
+    organizationId,
+    userId: new mongoose.Types.ObjectId(auth.userId),
+    action: AUDIT_ACTIONS.SUBMISSIONS_EXPORTED,
+    resourceType: "FORM",
+    resourceId: id,
+    metadata: { formId: id.toString(), rows: exported.length, truncated },
+    ipAddress: context.ipAddress,
+    userAgent: context.userAgent,
+  });
+
+  const safeName =
+    form.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "form";
+
+  return {
+    filename: `${safeName}-submissions.csv`,
+    csv,
+    truncated,
   };
 };
 

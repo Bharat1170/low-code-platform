@@ -14,6 +14,16 @@ const envSchema = z.object({
     .max(65535)
     .default(5000),
 
+  // Reverse-proxy hops to trust for the client IP. Defaults to 1 in
+  // production (Vercel) and 0 elsewhere; see app.ts.
+  TRUST_PROXY_HOPS: z
+    .coerce
+    .number()
+    .int()
+    .min(0)
+    .max(5)
+    .optional(),
+
   MONGO_URI: z
     .string()
     .trim()
@@ -82,4 +92,9 @@ if (!parsedEnv.success) {
   process.exit(1);
 }
 
-export const env = parsedEnv.data;
+export const env = {
+  ...parsedEnv.data,
+  TRUST_PROXY_HOPS:
+    parsedEnv.data.TRUST_PROXY_HOPS ??
+    (parsedEnv.data.NODE_ENV === "production" ? 1 : 0),
+};

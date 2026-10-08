@@ -12,6 +12,7 @@ import { SubmissionDetailsPage } from "./features/submissions/pages/SubmissionDe
 import { SubmissionsPage } from "./features/submissions/pages/SubmissionsPage.tsx";
 import { FormBuilderPage } from "./features/form-builder/components/FormBuilderPage.tsx";
 import { FormsPage } from "./features/forms/pages/FormsPage.tsx";
+import { PublicFormPage } from "./features/public-form/pages/PublicFormPage.tsx";
 
 /*
  * The form to edit is chosen with ?formId=<id>. Without it the builder
@@ -85,6 +86,8 @@ function App() {
           element={<SubmissionDetailsPage />}
         />
       </Route>
+      {/* Share links: open to everyone, signed in or not. */}
+      <Route path="/f/:publicId" element={<PublicFormPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

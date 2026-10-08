@@ -13,6 +13,13 @@ export const FIELD_TYPES = [
   "DROPDOWN",
   "CHECKBOX",
   "DATE",
+  "TEXTAREA",
+  "NUMBER",
+  "PHONE",
+  "URL",
+  "RADIO",
+  "MULTI_SELECT",
+  "RATING",
 ] as const;
 
 export type FieldType = (typeof FIELD_TYPES)[number];
@@ -37,6 +44,8 @@ export interface ValidationConfig {
   max?: number;
   pattern?: string;
   email?: boolean;
+  /* NUMBER fields only: whole numbers. */
+  integer?: boolean;
   /* DATE fields only: inclusive bounds as "YYYY-MM-DD" strings. */
   minDate?: string;
   maxDate?: string;
@@ -74,6 +83,36 @@ export interface DateConfig {
   defaultValue: string;
 }
 
+/* Multi-line text. */
+export interface TextareaConfig {
+  placeholder: string;
+  defaultValue: string;
+}
+
+/* A number is stored and submitted as its decimal text, or "". */
+export interface NumberConfig {
+  placeholder: string;
+  defaultValue: string;
+}
+
+/* Single choice shown as radio buttons. */
+export interface RadioConfig {
+  options: DropdownOption[];
+  defaultValue: string;
+}
+
+/* Any number of choices; the value is the list of chosen option values. */
+export interface MultiSelectConfig {
+  options: DropdownOption[];
+  defaultValue: string[];
+}
+
+/* 1..max stars; defaultValue 0 means no default rating. */
+export interface RatingConfig {
+  max: number;
+  defaultValue: number;
+}
+
 /* ---------- Field definitions (discriminated by `type`) ---------- */
 
 /*
@@ -108,13 +147,27 @@ export type CheckboxFieldDefinition = BaseFieldDefinition<
 >;
 
 export type DateFieldDefinition = BaseFieldDefinition<"DATE", DateConfig>;
+export type TextareaFieldDefinition = BaseFieldDefinition<"TEXTAREA", TextareaConfig>;
+export type NumberFieldDefinition = BaseFieldDefinition<"NUMBER", NumberConfig>;
+export type PhoneFieldDefinition = BaseFieldDefinition<"PHONE", TextConfig>;
+export type UrlFieldDefinition = BaseFieldDefinition<"URL", TextConfig>;
+export type RadioFieldDefinition = BaseFieldDefinition<"RADIO", RadioConfig>;
+export type MultiSelectFieldDefinition = BaseFieldDefinition<"MULTI_SELECT", MultiSelectConfig>;
+export type RatingFieldDefinition = BaseFieldDefinition<"RATING", RatingConfig>;
 
 export type FormFieldDefinition =
   | TextFieldDefinition
   | EmailFieldDefinition
   | DropdownFieldDefinition
   | CheckboxFieldDefinition
-  | DateFieldDefinition;
+  | DateFieldDefinition
+  | TextareaFieldDefinition
+  | NumberFieldDefinition
+  | PhoneFieldDefinition
+  | UrlFieldDefinition
+  | RadioFieldDefinition
+  | MultiSelectFieldDefinition
+  | RatingFieldDefinition;
 
 /* Maps a field type to its config / definition type. */
 export interface FieldConfigByType {
@@ -123,6 +176,13 @@ export interface FieldConfigByType {
   DROPDOWN: DropdownConfig;
   CHECKBOX: CheckboxConfig;
   DATE: DateConfig;
+  TEXTAREA: TextareaConfig;
+  NUMBER: NumberConfig;
+  PHONE: TextConfig;
+  URL: TextConfig;
+  RADIO: RadioConfig;
+  MULTI_SELECT: MultiSelectConfig;
+  RATING: RatingConfig;
 }
 
 export interface FieldDefinitionByType {
@@ -131,6 +191,13 @@ export interface FieldDefinitionByType {
   DROPDOWN: DropdownFieldDefinition;
   CHECKBOX: CheckboxFieldDefinition;
   DATE: DateFieldDefinition;
+  TEXTAREA: TextareaFieldDefinition;
+  NUMBER: NumberFieldDefinition;
+  PHONE: PhoneFieldDefinition;
+  URL: UrlFieldDefinition;
+  RADIO: RadioFieldDefinition;
+  MULTI_SELECT: MultiSelectFieldDefinition;
+  RATING: RatingFieldDefinition;
 }
 
 export type FieldConfig = FieldConfigByType[FieldType];
@@ -152,7 +219,14 @@ export type FieldIconId =
   | "email"
   | "dropdown"
   | "checkbox"
-  | "date";
+  | "date"
+  | "textarea"
+  | "number"
+  | "phone"
+  | "url"
+  | "radio"
+  | "multiselect"
+  | "rating";
 
 export interface FieldRegistryEntry<T extends FieldType> {
   type: T;

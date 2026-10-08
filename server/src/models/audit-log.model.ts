@@ -2,7 +2,8 @@ import mongoose, { Document, Schema } from "mongoose";
 
 export interface IAuditLog extends Document {
   organizationId: mongoose.Types.ObjectId;
-  userId: mongoose.Types.ObjectId;
+  /* Null for an anonymous actor (a public form submission). */
+  userId: mongoose.Types.ObjectId | null;
   action: string;
   resourceType: string;
   resourceId?: mongoose.Types.ObjectId | null;
@@ -25,7 +26,7 @@ const auditLogSchema = new Schema<IAuditLog>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
       index: true,
     },
 

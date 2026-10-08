@@ -321,3 +321,25 @@
 .sub-actions .fb-button + .fb-button {
   margin-left: 8px;
 }
+
+.sub-export {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.sub-export-error,
+.sub-export-note {
+  margin: 0;
+  max-width: 260px;
+  font-size: 12px;
+  text-align: right;
+}
+
+.sub-export-error {
+  color: var(--builder-danger);
+}
+
+.sub-export-note {
+  color: var(--builder-muted);
+}

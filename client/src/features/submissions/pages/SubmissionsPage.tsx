@@ -6,10 +6,12 @@ import {
   type SubmissionList,
 } from "../api/submissions.api.ts";
 import { DeleteSubmissionDialog } from "../components/DeleteSubmissionDialog.tsx";
+import { ExportCsvButton } from "../components/ExportCsvButton.tsx";
 import {
   formatDateTime,
   shortId,
   submissionsErrorMessage,
+  submitterLabel,
 } from "../utils/submissions.format.ts";
 import "../../form-builder/styles/form-builder.css";
 import "../styles/submissions.css";
@@ -191,6 +193,7 @@ export function SubmissionsPage() {
           <h1 className="sub-title">Submissions</h1>
           {formName && <p className="sub-subtitle">{formName}</p>}
         </div>
+        <ExportCsvButton formId={formId} />
       </header>
 
       {notice && (
@@ -309,7 +312,7 @@ export function SubmissionsPage() {
                     <td>
                       <span className="sub-version">v{item.version}</span>
                     </td>
-                    <td>{item.submittedByName ?? "Unknown user"}</td>
+                    <td>{submitterLabel(item.submittedBy, item.submittedByName)}</td>
                     <td className="sub-actions">
                       <Link
                         className="fb-button"

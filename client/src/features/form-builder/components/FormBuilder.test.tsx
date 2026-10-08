@@ -36,7 +36,7 @@ describe("FormBuilder", () => {
     render(<FormBuilder />);
 
     const entries = listFieldRegistryEntries();
-    expect(entries).toHaveLength(5);
+    expect(entries).toHaveLength(12);
 
     const palette = screen.getByRole("complementary", { name: "Field palette" });
     const buttons = within(palette).getAllByRole("button");

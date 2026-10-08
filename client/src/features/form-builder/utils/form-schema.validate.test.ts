@@ -104,7 +104,7 @@ describe("validateFormSchema: field ids", () => {
 });
 
 describe("validateFormSchema: field types", () => {
-  it.each(["NUMBER", "text", "", "constructor", "__proto__", 5, null])(
+  it.each(["SIGNATURE", "text", "", "constructor", "__proto__", 5, null])(
     "rejects unknown field type %j",
     (type) => {
       const schema = withField({ type });

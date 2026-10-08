@@ -20,7 +20,37 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /* Bounds the work a pattern can do on a long value. */
 const MAX_PATTERN_INPUT = 10_000;
 
-export type SubmittedData = Record<string, string | boolean>;
+export type SubmittedData = Record<string, string | boolean | string[]>;
+
+/* Digits with optional +, spaces, dashes, dots and brackets; 7–15 digits. */
+const PHONE_PATTERN = /^\+?[0-9 ().-]{7,25}$/;
+const MAX_URL_LENGTH = 2048;
+const NUMBER_TEXT = /^-?\d+(\.\d+)?$/;
+
+const isPhone = (value: string): boolean => {
+  if (!PHONE_PATTERN.test(value)) return false;
+  const digits = value.replace(/\D/g, "").length;
+  return digits >= 7 && digits <= 15;
+};
+
+/* Absolute http(s) URL only; javascript:, data: etc. are rejected. */
+const isWebUrl = (value: string): boolean => {
+  if (value.length > MAX_URL_LENGTH) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname !== "";
+  } catch {
+    return false;
+  }
+};
+
+const optionValues = (field: Record<string, unknown>): Set<string> => {
+  const config = isRecord(field.config) ? field.config : {};
+  const options = Array.isArray(config.options) ? config.options : [];
+  return new Set(
+    options.flatMap((o) => (isRecord(o) && typeof o.value === "string" ? [o.value] : [])),
+  );
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -141,9 +171,50 @@ const validateField = (
       return null;
     }
 
+    case "MULTI_SELECT": {
+      if (
+        provided &&
+        !(Array.isArray(value) && value.every((item) => typeof item === "string"))
+      ) {
+        return `${label} must be a list of options`;
+      }
+
+      const chosen = Array.isArray(value) ? (value as string[]) : [];
+
+      if (chosen.length === 0) {
+        return required ? `${label} is required` : null;
+      }
+
+      const allowed = optionValues(field);
+      if (new Set(chosen).size !== chosen.length) {
+        return `${label} must not repeat an option`;
+      }
+      if (!chosen.every((item) => allowed.has(item))) {
+        return `${label} must only contain the available options`;
+      }
+
+      // min / max count how many options are chosen.
+      const min = finiteNumber(rules.min);
+      const max = finiteNumber(rules.max);
+      if (min !== undefined && chosen.length < min) {
+        return `${label} needs at least ${min} selections`;
+      }
+      if (max !== undefined && chosen.length > max) {
+        return `${label} allows at most ${max} selections`;
+      }
+
+      return null;
+    }
+
     case "TEXT":
     case "EMAIL":
-    case "DROPDOWN": {
+    case "TEXTAREA":
+    case "NUMBER":
+    case "PHONE":
+    case "URL":
+    case "DROPDOWN":
+    case "RADIO":
+    case "RATING": {
       if (provided && typeof value !== "string") {
         return `${label} must be text`;
       }
@@ -154,13 +225,37 @@ const validateField = (
         return required ? `${label} is required` : null;
       }
 
-      if (field.type === "DROPDOWN") {
-        const config = isRecord(field.config) ? field.config : {};
-        const options = Array.isArray(config.options) ? config.options : [];
-
-        return options.some((o) => isRecord(o) && o.value === text)
+      if (field.type === "DROPDOWN" || field.type === "RADIO") {
+        return optionValues(field).has(text)
           ? null
           : `${label} must be one of the available options`;
+      }
+
+      if (field.type === "RATING") {
+        const config = isRecord(field.config) ? field.config : {};
+        const scale = finiteNumber(config.max) ?? 5;
+        const rating = Number(text);
+
+        return /^\d{1,2}$/.test(text) && rating >= 1 && rating <= scale
+          ? null
+          : `${label} must be a rating from 1 to ${scale}`;
+      }
+
+      if (field.type === "NUMBER") {
+        if (!NUMBER_TEXT.test(text) || text.length > 32) {
+          return `${label} must be a number`;
+        }
+        if (rules.integer === true && !Number.isInteger(Number(text))) {
+          return `${label} must be a whole number`;
+        }
+      }
+
+      if (field.type === "PHONE" && !isPhone(text)) {
+        return `${label} must be a valid phone number`;
+      }
+
+      if (field.type === "URL" && !isWebUrl(text)) {
+        return `${label} must be a valid web address (http or https)`;
       }
 
       return validateText(field, text, label);

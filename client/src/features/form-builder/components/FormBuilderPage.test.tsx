@@ -14,6 +14,7 @@ const FORM_ID = "665f1c2e8f1b2c3d4e5f6a7b";
 const record = (draftSchema: unknown): api.FormRecord => ({
   id: FORM_ID,
   name: "F",
+  description: "",
   status: "DRAFT",
   draftSchema,
 });

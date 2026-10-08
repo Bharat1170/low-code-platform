@@ -1,5 +1,7 @@
 import type { FormFieldDefinition } from "../../form-builder/types/form-builder.types.ts";
+import { isFieldType } from "../../form-builder/registry/field-registry.ts";
 import { isValidDateOnly } from "../../form-builder/utils/date-only.ts";
+import { NUMBER_TEXT } from "../../form-builder/utils/form-schema.validate.ts";
 import type {
   FieldErrors,
   FieldValue,
@@ -19,6 +21,39 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /* Bounds the work a pattern can do on a very long value. */
 const MAX_PATTERN_INPUT = 10_000;
+
+/* Same rules as the server (form-submission-validation.util.ts). */
+const PHONE_PATTERN = /^\+?[0-9 ().-]{7,25}$/;
+const MAX_URL_LENGTH = 2048;
+
+export const isPhoneNumber = (value: string): boolean => {
+  if (!PHONE_PATTERN.test(value)) return false;
+  const digits = value.replace(/\D/g, "").length;
+  return digits >= 7 && digits <= 15;
+};
+
+/* Absolute http(s) URL only; javascript:, data: etc. are rejected. */
+export const isWebUrl = (value: string): boolean => {
+  if (value.length > MAX_URL_LENGTH) return false;
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      url.hostname !== ""
+    );
+  } catch {
+    return false;
+  }
+};
+
+/* 1..max for a rating field (the scale defaults to 5). */
+export const ratingScale = (field: FormFieldDefinition): number => {
+  const config: unknown = field.config;
+  const max = isRecord(config) ? config.max : undefined;
+  return typeof max === "number" && Number.isInteger(max) && max >= 1 && max <= 10
+    ? max
+    : 5;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -56,19 +91,26 @@ export const defaultValueFor = (field: FormFieldDefinition): FieldValue => {
     return fallback === true;
   }
 
+  if (field.type === "MULTI_SELECT") {
+    return Array.isArray(fallback)
+      ? fallback.filter((item): item is string => typeof item === "string")
+      : [];
+  }
+
+  if (field.type === "RATING") {
+    // 0 means "no default rating".
+    return typeof fallback === "number" && Number.isInteger(fallback) && fallback > 0
+      ? String(fallback)
+      : "";
+  }
+
   return typeof fallback === "string" ? fallback : "";
 };
 
 export const isSupportedField = (
   field: unknown,
 ): field is FormFieldDefinition =>
-  isRecord(field) &&
-  typeof field.id === "string" &&
-  (field.type === "TEXT" ||
-    field.type === "EMAIL" ||
-    field.type === "DROPDOWN" ||
-    field.type === "CHECKBOX" ||
-    field.type === "DATE");
+  isRecord(field) && typeof field.id === "string" && isFieldType(field.type);
 
 export const dropdownOptions = (
   field: FormFieldDefinition,
@@ -100,6 +142,26 @@ export const validateField = (
     return required && value !== true ? `${label} must be checked` : null;
   }
 
+  if (field.type === "MULTI_SELECT") {
+    const chosen = Array.isArray(value) ? value : [];
+    if (chosen.length === 0) {
+      return required ? `${label} is required` : null;
+    }
+    const allowed = new Set(dropdownOptions(field).map((option) => option.value));
+    if (!chosen.every((item) => allowed.has(item))) {
+      return `${label} must only contain the available options`;
+    }
+    const minCount = finiteNumber(rules.min);
+    const maxCount = finiteNumber(rules.max);
+    if (minCount !== undefined && chosen.length < minCount) {
+      return `${label} needs at least ${minCount} selections`;
+    }
+    if (maxCount !== undefined && chosen.length > maxCount) {
+      return `${label} allows at most ${maxCount} selections`;
+    }
+    return null;
+  }
+
   const text = typeof value === "string" ? value : "";
 
   if (field.type === "DATE") {
@@ -122,10 +184,35 @@ export const validateField = (
     return required ? `${label} is required` : null;
   }
 
-  if (field.type === "DROPDOWN") {
+  if (field.type === "DROPDOWN" || field.type === "RADIO") {
     return dropdownOptions(field).some((option) => option.value === text)
       ? null
       : `${label} must be one of the available options`;
+  }
+
+  if (field.type === "RATING") {
+    const scale = ratingScale(field);
+    const rating = Number(text);
+    return /^\d{1,2}$/.test(text) && rating >= 1 && rating <= scale
+      ? null
+      : `${label} must be a rating from 1 to ${scale}`;
+  }
+
+  if (field.type === "NUMBER") {
+    if (text.length > 32 || !NUMBER_TEXT.test(text)) {
+      return `${label} must be a number`;
+    }
+    if (rules.integer === true && !Number.isInteger(Number(text))) {
+      return `${label} must be a whole number`;
+    }
+  }
+
+  if (field.type === "PHONE" && !isPhoneNumber(text)) {
+    return `${label} must be a valid phone number`;
+  }
+
+  if (field.type === "URL" && !isWebUrl(text)) {
+    return `${label} must be a valid web address (http or https)`;
   }
 
   if (field.type === "EMAIL" || rules.email === true) {

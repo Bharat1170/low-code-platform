@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
 
-import { findFormByIdAndOrganization } from "../repositories/form.repository.js";
+import {
+  findFormByIdAndOrganization,
+  findFormByPublicId,
+} from "../repositories/form.repository.js";
 import { findFormVersionById } from "../repositories/form-version.repository.js";
 import {
   readPublishedFormCache,
@@ -77,9 +80,62 @@ const notPublished = (): AppError =>
 export const getPublishedForm = async (
   auth: AuthContext,
   formId: string,
+): Promise<PublishedFormView> =>
+  loadPublishedView(
+    new mongoose.Types.ObjectId(auth.organizationId),
+    new mongoose.Types.ObjectId(formId),
+  );
+
+/*
+ * What an anonymous visitor of a share link receives: enough to render
+ * and submit the current published version, and nothing else (no ids of
+ * the form, version, organization or users, no draft, no submissions).
+ */
+export interface PublicFormView {
+  name: string;
+  description: string;
+  version: number;
+  schema: Record<string, unknown>;
+}
+
+const publicNotFound = (): AppError =>
+  new AppError(404, "FORM_NOT_FOUND", "This form is not available");
+
+export const getPublicForm = async (
+  publicId: string,
+): Promise<PublicFormView> => {
+  const form = await findFormByPublicId(publicId);
+
+  if (!form || form.status === "ARCHIVED" || !form.publishedVersionId) {
+    throw publicNotFound();
+  }
+
+  let view: PublishedFormView;
+  try {
+    view = await loadPublishedView(
+      form.organizationId,
+      form._id as mongoose.Types.ObjectId,
+    );
+  } catch (error) {
+    if (error instanceof AppError && error.statusCode === 404) {
+      throw publicNotFound();
+    }
+    throw error;
+  }
+
+  return {
+    name: form.name,
+    description: form.description ?? "",
+    version: view.version,
+    schema: view.schema,
+  };
+};
+
+/* Cache-backed read of the version a form currently points to. */
+const loadPublishedView = async (
+  organizationId: mongoose.Types.ObjectId,
+  id: mongoose.Types.ObjectId,
 ): Promise<PublishedFormView> => {
-  const organizationId = new mongoose.Types.ObjectId(auth.organizationId);
-  const id = new mongoose.Types.ObjectId(formId);
   const normalizedId = id.toString();
 
   try {

@@ -5,6 +5,7 @@ import type {
 } from "express";
 
 import type { AuthContext } from "../types/auth.types.js";
+import { isSessionActive } from "../repositories/session.repository.js";
 import { AppError } from "../utils/errors.js";
 import { verifyAccessToken } from "../utils/jwt.util.js";
 
@@ -33,31 +34,41 @@ const extractBearerToken = (req: Request): string => {
 };
 
 /*
- * Requires a valid access token.
- *
- * Note: this verifies the JWT signature and expiry only. It does not
- * look up the server-side session, so an access token issued for a
- * session that was later revoked stays valid until it expires.
+ * Requires a valid access token whose server-side session is still
+ * active. Logout, session revocation, refresh rotation and reuse
+ * detection therefore take effect at once, not when the token expires.
  */
-export const authenticate = (
+export const authenticate = async (
   req: Request,
   _res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   const token = extractBearerToken(req);
 
+  let payload: ReturnType<typeof verifyAccessToken>;
   try {
-    const payload = verifyAccessToken(token);
-
-    req.auth = {
-      userId: payload.sub,
-      organizationId: payload.organizationId,
-      sessionId: payload.sessionId,
-    };
+    payload = verifyAccessToken(token);
   } catch {
     // Do not expose JWT verification details to the client.
     throw unauthorized("Invalid or expired access token");
   }
+
+  // Same message as an invalid token: never reveal why it was rejected.
+  if (
+    !(await isSessionActive(
+      payload.sessionId,
+      payload.sub,
+      payload.organizationId,
+    ))
+  ) {
+    throw unauthorized("Invalid or expired access token");
+  }
+
+  req.auth = {
+    userId: payload.sub,
+    organizationId: payload.organizationId,
+    sessionId: payload.sessionId,
+  };
 
   next();
 };

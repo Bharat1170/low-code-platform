@@ -1,4 +1,10 @@
-import { ApiError, authorizedRequest } from "../../../lib/http.ts";
+import {
+  ApiError,
+  authorizedFetch,
+  authorizedRequest,
+  readEnvelope,
+  toApiError,
+} from "../../../lib/http.ts";
 import type { FormSchema } from "../../form-builder/types/form-builder.types.ts";
 import { isFormSchema } from "../../form-builder/utils/form-schema.validate.ts";
 
@@ -15,7 +21,8 @@ export interface SubmissionListItem {
   formId: string;
   formVersionId: string;
   version: number;
-  submittedBy: string;
+  /* Null for an anonymous (public link) submission. */
+  submittedBy: string | null;
   /* Null when the submitter's name is not available. */
   submittedByName: string | null;
   submittedAt: string;
@@ -43,14 +50,18 @@ export interface ListSubmissionsParams {
   order?: "asc" | "desc";
 }
 
+/* One stored answer: text, a checkbox, or a multiple-choice list. */
+export type SubmissionValue = string | boolean | string[];
+
 export interface SubmissionDetails {
   id: string;
   formId: string;
   formName: string;
   formVersionId: string;
   version: number;
-  data: Record<string, string | boolean>;
-  submittedBy: string;
+  data: Record<string, SubmissionValue>;
+  /* Null for an anonymous (public link) submission. */
+  submittedBy: string | null;
   submittedByName: string | null;
   submittedAt: string;
   /* Schema of the version the submission was made against; null if unavailable. */
@@ -72,7 +83,7 @@ const toListItem = (value: unknown): SubmissionListItem => {
     !isString(value.formId) ||
     !isString(value.formVersionId) ||
     typeof value.version !== "number" ||
-    !isString(value.submittedBy) ||
+    !(value.submittedBy === null || isString(value.submittedBy)) ||
     !isString(value.submittedAt)
   ) {
     throw invalidResponse();
@@ -83,7 +94,7 @@ const toListItem = (value: unknown): SubmissionListItem => {
     formId: value.formId,
     formVersionId: value.formVersionId,
     version: value.version,
-    submittedBy: value.submittedBy,
+    submittedBy: isString(value.submittedBy) ? value.submittedBy : null,
     submittedByName: isString(value.submittedByName)
       ? value.submittedByName
       : null,
@@ -152,16 +163,18 @@ export const getSubmission = async (
     !isString(sub.formVersionId) ||
     typeof sub.version !== "number" ||
     !isRecord(sub.data) ||
-    !isString(sub.submittedBy) ||
+    !(sub.submittedBy === null || isString(sub.submittedBy)) ||
     !isString(sub.submittedAt)
   ) {
     throw invalidResponse();
   }
 
-  const data: Record<string, string | boolean> = {};
+  const data: Record<string, SubmissionValue> = {};
   for (const [key, value] of Object.entries(sub.data)) {
     if (isString(value) || typeof value === "boolean") {
       data[key] = value;
+    } else if (Array.isArray(value) && value.every(isString)) {
+      data[key] = [...value];
     }
   }
 
@@ -172,7 +185,7 @@ export const getSubmission = async (
     formVersionId: sub.formVersionId,
     version: sub.version,
     data,
-    submittedBy: sub.submittedBy,
+    submittedBy: isString(sub.submittedBy) ? sub.submittedBy : null,
     submittedByName: isString(sub.submittedByName)
       ? sub.submittedByName
       : null,
@@ -194,4 +207,39 @@ export const deleteSubmission = async (
     `/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`,
     { method: "DELETE" },
   );
+};
+
+export interface SubmissionsCsv {
+  blob: Blob;
+  filename: string;
+  /* The server exported only the newest rows (export cap reached). */
+  truncated: boolean;
+}
+
+const FILENAME = /filename="([^"]+)"/;
+
+/*
+ * Downloads the form's submissions as CSV (newest first). The server
+ * builds the file, scopes it to the caller's organization and guards
+ * spreadsheet formulas; nothing here parses or rewrites the content.
+ */
+export const exportSubmissionsCsv = async (
+  formId: string,
+): Promise<SubmissionsCsv> => {
+  const response = await authorizedFetch(
+    `/forms/${encodeURIComponent(formId)}/submissions/export`,
+  );
+
+  if (!response.ok) {
+    throw toApiError(response.status, await readEnvelope(response));
+  }
+
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filename = FILENAME.exec(disposition)?.[1] ?? "submissions.csv";
+
+  return {
+    blob: await response.blob(),
+    filename,
+    truncated: response.headers.get("X-Export-Truncated") === "true",
+  };
 };

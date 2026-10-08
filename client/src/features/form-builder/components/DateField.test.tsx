@@ -131,7 +131,7 @@ describe("Date in the builder", () => {
   const addDate = async (user: ReturnType<typeof userEvent.setup>) =>
     user.click(screen.getByRole("button", { name: "Add Date field" }));
 
-  it("appears in the palette, after the other four", () => {
+  it("appears in the palette, after the original four types", () => {
     render(<FormBuilder />);
 
     const palette = screen.getByRole("complementary", { name: "Field palette" });
@@ -141,9 +141,16 @@ describe("Date in the builder", () => {
       "Add Dropdown field",
       "Add Checkbox field",
       "Add Date field",
+      "Add Long text field",
+      "Add Number field",
+      "Add Phone field",
+      "Add Website field",
+      "Add Single choice field",
+      "Add Multiple choice field",
+      "Add Rating field",
     ]);
     expect(within(palette).getByText("Date")).toBeTruthy();
-    expect(palette.querySelectorAll("svg").length).toBe(5);
+    expect(palette.querySelectorAll("svg").length).toBe(12);
   });
 
   it("adds a numbered Date field to the canvas, selected, with a date preview", async () => {

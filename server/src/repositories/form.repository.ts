@@ -220,6 +220,22 @@ export const assignPublicIdIfMissing = async (
   return assigned ?? Form.findOne(scope).exec();
 };
 
+/*
+ * The ONLY form lookup without a tenant filter: a share link carries just
+ * the random publicId. Callers must derive everything else (organization,
+ * version) from the returned document and expose none of it. The shape is
+ * checked first so nothing but a plain string reaches the query.
+ */
+export const findFormByPublicId = async (
+  publicId: string,
+): Promise<IForm | null> => {
+  if (!isValidPublicId(publicId)) {
+    return null;
+  }
+
+  return Form.findOne({ publicId }).select("-draftSchema").exec();
+};
+
 export const findFormBySlugAndOrganization = async (
   slug: string,
   organizationId: mongoose.Types.ObjectId,

@@ -13,6 +13,7 @@ import {
 
 import {
   deleteSubmission,
+  exportSubmissions,
   getSubmission,
   listSubmissions,
   submitForm,
@@ -94,6 +95,15 @@ router.get(
   requireActiveAccount,
   requirePermission(PERMISSIONS.SUBMISSION_READ),
   listSubmissions,
+);
+
+// Must stay before /:id/submissions/:submissionId ("export" is not an id).
+router.get(
+  "/:id/submissions/export",
+  authenticate,
+  requireActiveAccount,
+  requirePermission(PERMISSIONS.SUBMISSION_READ),
+  exportSubmissions,
 );
 
 router.get(

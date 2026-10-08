@@ -160,6 +160,7 @@ describe("fetchForm", () => {
     expect(form).toEqual({
       id: FORM_ID,
       name: "F",
+      description: "",
       status: "DRAFT",
       draftSchema: { version: 1, fields: [] },
     });

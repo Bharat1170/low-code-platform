@@ -423,7 +423,7 @@ describe("schema validation", () => {
   it("rejects an unknown field type", async () => {
     await rejected({
       version: 1,
-      fields: [textField("a", { type: "NUMBER" })],
+      fields: [textField("a", { type: "SIGNATURE" })],
     });
     await rejected({
       version: 1,

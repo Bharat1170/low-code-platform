@@ -1,0 +1,51 @@
+.fb-share-dialog {
+  max-width: 480px;
+}
+
+.fb-share-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.fb-share-url {
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.fb-share-status {
+  margin: 0 0 16px;
+  color: var(--builder-muted);
+}
+
+.fb-share-copy-failed {
+  margin: 8px 0 0;
+  color: var(--builder-danger);
+  font-size: 12px;
+}
+
+.fb-share-note {
+  margin: 12px 0 20px;
+  padding: 8px 10px;
+  border: 1px solid var(--builder-border);
+  border-radius: var(--builder-radius-sm);
+  background: var(--builder-bg);
+  color: var(--builder-muted);
+  font-size: 12px;
+}
+
+.fb-share-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .fb-share-dialog .fb-dialog-actions {
+    flex-wrap: wrap;
+  }
+}

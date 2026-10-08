@@ -1,4 +1,5 @@
 import mongoose, { type ClientSession } from "mongoose";
+import type { SubmissionData } from "../validators/form-submission.validator.js";
 
 import {
   FormSubmission,
@@ -26,8 +27,8 @@ export interface CreateFormSubmissionData {
   formId: mongoose.Types.ObjectId;
   formVersionId: mongoose.Types.ObjectId;
   version: number;
-  data: Record<string, string | boolean>;
-  submittedBy: mongoose.Types.ObjectId;
+  data: SubmissionData;
+  submittedBy: mongoose.Types.ObjectId | null;
   submittedAt: Date;
 }
 
@@ -150,11 +151,32 @@ export const createFormSubmission = async (
     formVersionId: safeObjectId(input.formVersionId),
     version: input.version,
     data: input.data,
-    submittedBy: safeObjectId(input.submittedBy),
+    submittedBy:
+      input.submittedBy === null ? null : safeObjectId(input.submittedBy),
     submittedAt: input.submittedAt,
   });
 
   await submission.save({ session: dbSession });
 
   return submission;
+};
+
+/*
+ * Submissions with their data for an export, newest first, scoped by
+ * organization AND form, and capped by the caller.
+ */
+export const listSubmissionsForExport = async (
+  organizationId: mongoose.Types.ObjectId,
+  formId: mongoose.Types.ObjectId,
+  limit: number,
+) => {
+  return FormSubmission.find({
+    organizationId: safeObjectId(organizationId),
+    formId: safeObjectId(formId),
+  })
+    .select("formVersionId version data submittedBy submittedAt")
+    .sort({ submittedAt: -1, _id: -1 })
+    .limit(limit)
+    .lean()
+    .exec();
 };

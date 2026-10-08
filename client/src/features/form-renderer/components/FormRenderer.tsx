@@ -16,6 +16,7 @@ import {
   fieldLabel,
   isRequired,
   isSupportedField,
+  ratingScale,
   validateForm,
 } from "../utils/form-validation.ts";
 import "../styles/form-renderer.css";
@@ -78,8 +79,8 @@ function FieldView({
     [descriptionId, errorId].filter(Boolean).join(" ") || undefined;
   const required = isRequired(field);
 
-  const label = (
-    <label className="fr-label" htmlFor={controlId}>
+  const labelText = (
+    <>
       {fieldLabel(field)}
       {required && (
         <>
@@ -89,7 +90,32 @@ function FieldView({
           <span className="fr-sr-only"> (required)</span>
         </>
       )}
+    </>
+  );
+
+  const label = (
+    <label className="fr-label" htmlFor={controlId}>
+      {labelText}
     </label>
+  );
+
+  const text = typeof value === "string" ? value : "";
+  const chosen = Array.isArray(value) ? value : [];
+
+  /* A radio-style group; the fieldset carries the id so errors can focus it. */
+  const group = (children: ReactNode, className = "fr-choices") => (
+    <fieldset
+      id={controlId}
+      className={`fr-group ${className}`}
+      tabIndex={-1}
+      aria-describedby={describedBy}
+      aria-invalid={error ? true : undefined}
+      aria-required={required ? true : undefined}
+      disabled={readOnly}
+    >
+      <legend className="fr-label">{labelText}</legend>
+      {children}
+    </fieldset>
   );
 
   const common = {
@@ -117,6 +143,108 @@ function FieldView({
         />
       );
       break;
+
+    case "TEXTAREA":
+      control = (
+        <textarea
+          {...common}
+          className="fb-control fr-textarea"
+          rows={4}
+          value={text}
+          placeholder={placeholderOf(field)}
+          readOnly={readOnly}
+          onChange={(event) => onChange(field.id, event.target.value)}
+        />
+      );
+      break;
+
+    case "NUMBER":
+    case "PHONE":
+    case "URL":
+      control = (
+        <input
+          {...common}
+          className="fb-control"
+          type={field.type === "PHONE" ? "tel" : field.type === "URL" ? "url" : "text"}
+          inputMode={
+            field.type === "NUMBER" ? "decimal" : field.type === "PHONE" ? "tel" : "url"
+          }
+          value={text}
+          placeholder={placeholderOf(field)}
+          readOnly={readOnly}
+          autoComplete={field.type === "PHONE" ? "tel" : field.type === "URL" ? "url" : "off"}
+          onChange={(event) => onChange(field.id, event.target.value)}
+        />
+      );
+      break;
+
+    case "RADIO":
+      control = group(
+        dropdownOptions(field).map((option) => (
+          <label className="fr-choice" key={option.value}>
+            <input
+              type="radio"
+              name={controlId}
+              value={option.value}
+              checked={text === option.value}
+              onChange={() => onChange(field.id, option.value)}
+              onBlur={() => onBlur(field.id)}
+            />
+            <span>{option.label}</span>
+          </label>
+        )),
+      );
+      break;
+
+    case "MULTI_SELECT":
+      control = group(
+        dropdownOptions(field).map((option) => (
+          <label className="fr-choice" key={option.value}>
+            <input
+              type="checkbox"
+              value={option.value}
+              checked={chosen.includes(option.value)}
+              onChange={(event) =>
+                onChange(
+                  field.id,
+                  event.target.checked
+                    ? [...chosen, option.value]
+                    : chosen.filter((item) => item !== option.value),
+                )
+              }
+              onBlur={() => onBlur(field.id)}
+            />
+            <span>{option.label}</span>
+          </label>
+        )),
+      );
+      break;
+
+    case "RATING": {
+      const scale = ratingScale(field);
+      const current = Number(text) || 0;
+      control = group(
+        Array.from({ length: scale }, (_, index) => index + 1).map((star) => (
+          <label className="fr-star" key={star} data-on={star <= current ? "true" : undefined}>
+            <input
+              type="radio"
+              className="fr-sr-only"
+              name={controlId}
+              value={String(star)}
+              checked={current === star}
+              onChange={() => onChange(field.id, String(star))}
+              onBlur={() => onBlur(field.id)}
+            />
+            <span aria-hidden="true">★</span>
+            <span className="fr-sr-only">
+              {star} of {scale}
+            </span>
+          </label>
+        )),
+        "fr-rating",
+      );
+      break;
+    }
 
     case "DROPDOWN":
       control = (
@@ -177,6 +305,10 @@ function FieldView({
           {control}
           {label}
         </div>
+      ) : field.type === "RADIO" ||
+        field.type === "MULTI_SELECT" ||
+        field.type === "RATING" ? (
+        control
       ) : (
         <>
           {label}

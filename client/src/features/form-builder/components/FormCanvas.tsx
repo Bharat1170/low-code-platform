@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { FormSchema } from "../types/form-builder.types.ts";
 import { FormField } from "./FormField.tsx";
 
@@ -7,6 +8,8 @@ interface FormCanvasProps {
   onSelectField: (fieldId: string) => void;
   onRemoveField: (fieldId: string) => void;
   onAddFirstField: () => void;
+  /* Editable name and description shown above the fields. */
+  details?: ReactNode;
 }
 
 export function FormCanvas({
@@ -15,10 +18,12 @@ export function FormCanvas({
   onSelectField,
   onRemoveField,
   onAddFirstField,
+  details,
 }: FormCanvasProps) {
   return (
     <main className="fb-canvas" aria-label="Form canvas">
       <div className="fb-canvas-inner">
+        {details}
         {schema.fields.length === 0 ? (
           <div className="fb-empty">
             <div className="fb-empty-mark" aria-hidden="true">
@@ -52,7 +57,11 @@ export function FormCanvas({
         ) : (
           <>
             <div className="fb-canvas-heading">
-              <h2 className="fb-canvas-title">Untitled form</h2>
+              {details ? (
+                <h2 className="fb-canvas-title fb-canvas-title-sm">Fields</h2>
+              ) : (
+                <h2 className="fb-canvas-title">Untitled form</h2>
+              )}
               <p className="fb-canvas-count">
                 {schema.fields.length}{" "}
                 {schema.fields.length === 1 ? "field" : "fields"}

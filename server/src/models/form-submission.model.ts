@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import type { SubmissionData } from "../validators/form-submission.validator.js";
 
 /*
  * One submission of a published form (8.17.15). All forms share this one
@@ -10,16 +11,17 @@ import mongoose, { Schema, Document } from "mongoose";
  * organizationId, formId, formVersionId, version and submittedBy are only
  * ever set by the server, never taken from a request.
  *
- * `data` holds field values keyed by the stable field id (strings and
- * booleans only, validated before saving).
+ * `data` holds field values keyed by the stable field id (strings,
+ * booleans and lists of strings only, validated before saving).
  */
 export interface IFormSubmission extends Document {
   organizationId: mongoose.Types.ObjectId;
   formId: mongoose.Types.ObjectId;
   formVersionId: mongoose.Types.ObjectId;
   version: number;
-  data: Record<string, string | boolean>;
-  submittedBy: mongoose.Types.ObjectId;
+  data: SubmissionData;
+  /* The signed-in submitter; null for an anonymous public submission. */
+  submittedBy: mongoose.Types.ObjectId | null;
   submittedAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -63,7 +65,7 @@ const formSubmissionSchema = new Schema<IFormSubmission>(
     submittedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
     },
 
     submittedAt: {

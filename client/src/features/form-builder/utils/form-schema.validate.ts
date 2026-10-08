@@ -40,7 +40,20 @@ const CONFIG_KEYS: Record<FieldType, readonly string[]> = {
   DROPDOWN: ["placeholder", "options", "defaultValue"],
   CHECKBOX: ["defaultValue"],
   DATE: ["defaultValue"],
+  TEXTAREA: ["placeholder", "defaultValue"],
+  NUMBER: ["placeholder", "defaultValue"],
+  PHONE: ["placeholder", "defaultValue"],
+  URL: ["placeholder", "defaultValue"],
+  RADIO: ["options", "defaultValue"],
+  MULTI_SELECT: ["options", "defaultValue"],
+  RATING: ["max", "defaultValue"],
 };
+
+export const MAX_TEXTAREA_LENGTH = 10_000;
+export const MIN_RATING_SCALE = 3;
+export const MAX_RATING_SCALE = 10;
+/* A NUMBER value or default: optional minus, digits, optional decimals. */
+export const NUMBER_TEXT = /^-?\d+(\.\d+)?$/;
 
 const VALIDATION_KEYS = [
   "required",
@@ -50,6 +63,7 @@ const VALIDATION_KEYS = [
   "max",
   "pattern",
   "email",
+  "integer",
   "minDate",
   "maxDate",
 ];
@@ -135,6 +149,12 @@ const checkValidation = (
   if (required !== undefined && typeof required !== "boolean") {
     errors.push(`${where}: validation.required must be a boolean`);
   }
+  if (
+    validation.integer !== undefined &&
+    typeof validation.integer !== "boolean"
+  ) {
+    errors.push(`${where}: validation.integer must be a boolean`);
+  }
   if (email !== undefined && typeof email !== "boolean") {
     errors.push(`${where}: validation.email must be a boolean`);
   }
@@ -203,19 +223,64 @@ const checkConfig = (
     return;
   }
 
-  if (!isString(defaultValue, 1000)) {
-    errors.push(`${where}: config.defaultValue must be a string`);
-  }
-
-  if (type === "TEXT" || type === "EMAIL") {
-    if (!isString(placeholder, 200)) {
-      errors.push(`${where}: config.placeholder must be a string`);
+  if (type === "RATING") {
+    const { max } = config;
+    if (
+      !isNonNegativeInteger(max) ||
+      max < MIN_RATING_SCALE ||
+      max > MAX_RATING_SCALE
+    ) {
+      errors.push(
+        `${where}: config.max must be a whole number from ${MIN_RATING_SCALE} to ${MAX_RATING_SCALE}`,
+      );
+    }
+    if (
+      !isNonNegativeInteger(defaultValue) ||
+      (isNonNegativeInteger(max) && defaultValue > max)
+    ) {
+      errors.push(`${where}: config.defaultValue must be between 0 and max`);
     }
     return;
   }
 
-  // DROPDOWN
-  if (!isString(placeholder, 200)) {
+  if (type === "MULTI_SELECT") {
+    if (
+      !Array.isArray(defaultValue) ||
+      !defaultValue.every((item) => isString(item, 200))
+    ) {
+      errors.push(`${where}: config.defaultValue must be a list of option values`);
+      return;
+    }
+  } else if (
+    !isString(defaultValue, type === "TEXTAREA" ? MAX_TEXTAREA_LENGTH : 1000)
+  ) {
+    errors.push(`${where}: config.defaultValue must be a string`);
+  }
+
+  if (
+    type === "TEXT" ||
+    type === "EMAIL" ||
+    type === "TEXTAREA" ||
+    type === "PHONE" ||
+    type === "URL" ||
+    type === "NUMBER"
+  ) {
+    if (!isString(placeholder, 200)) {
+      errors.push(`${where}: config.placeholder must be a string`);
+    }
+    if (
+      type === "NUMBER" &&
+      typeof defaultValue === "string" &&
+      defaultValue !== "" &&
+      (defaultValue.length > 32 || !NUMBER_TEXT.test(defaultValue))
+    ) {
+      errors.push(`${where}: config.defaultValue must be a number`);
+    }
+    return;
+  }
+
+  // DROPDOWN, RADIO, MULTI_SELECT
+  if (type === "DROPDOWN" && !isString(placeholder, 200)) {
     errors.push(`${where}: config.placeholder must be a string`);
   }
 
@@ -247,12 +312,17 @@ const checkConfig = (
     values.add(option.value);
   }
 
-  if (
-    typeof defaultValue === "string" &&
-    defaultValue !== "" &&
-    !values.has(defaultValue)
-  ) {
+  const defaults = Array.isArray(defaultValue)
+    ? (defaultValue as string[])
+    : typeof defaultValue === "string" && defaultValue !== ""
+      ? [defaultValue]
+      : [];
+
+  if (defaults.some((item) => !values.has(item))) {
     errors.push(`${where}: config.defaultValue must match an option value`);
+  }
+  if (new Set(defaults).size !== defaults.length) {
+    errors.push(`${where}: config.defaultValue must not repeat an option`);
   }
 };
 
@@ -326,6 +396,24 @@ export const validateFormSchema = (
     checkConfig(field.type, field.config, where, errors);
 
     const rules = isPlainObject(field.validation) ? field.validation : {};
+    if (rules.integer !== undefined && field.type !== "NUMBER") {
+      errors.push(`${where}: integer is only valid for NUMBER fields`);
+    }
+    if (
+      field.type === "NUMBER" &&
+      isPlainObject(field.config) &&
+      typeof field.config.defaultValue === "string" &&
+      NUMBER_TEXT.test(field.config.defaultValue)
+    ) {
+      const number = Number(field.config.defaultValue);
+      if (
+        (typeof rules.min === "number" && number < rules.min) ||
+        (typeof rules.max === "number" && number > rules.max) ||
+        (rules.integer === true && !Number.isInteger(number))
+      ) {
+        errors.push(`${where}: config.defaultValue must satisfy the number rules`);
+      }
+    }
     if (field.type !== "DATE") {
       if (rules.minDate !== undefined || rules.maxDate !== undefined) {
         errors.push(`${where}: minDate and maxDate are only valid for DATE fields`);

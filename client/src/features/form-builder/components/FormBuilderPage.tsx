@@ -19,6 +19,8 @@ type LoadState =
   | {
       kind: "ready";
       schema: FormSchema;
+      name: string;
+      description: string;
       published: boolean;
       status: FormStatusValue;
     };
@@ -57,6 +59,8 @@ export function FormBuilderPage({
           setState({
             kind: "ready",
             schema: createEmptyFormSchema(),
+            name: form.name,
+            description: form.description,
             published: form.hasPublishedVersion ?? false,
             status: toFormStatus(form.status),
           });
@@ -64,6 +68,8 @@ export function FormBuilderPage({
           setState({
             kind: "ready",
             schema: form.draftSchema,
+            name: form.name,
+            description: form.description,
             published: form.hasPublishedVersion ?? false,
             status: toFormStatus(form.status),
           });
@@ -91,6 +97,8 @@ export function FormBuilderPage({
       <FormBuilder
         formId={formId}
         initialSchema={state.schema}
+        initialName={state.name}
+        initialDescription={state.description}
         initiallyPublished={state.published}
         initialStatus={state.status}
         headerExtras={headerExtras}

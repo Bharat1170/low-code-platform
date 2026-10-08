@@ -1,4 +1,4 @@
-import { type ClientSession } from "mongoose";
+import mongoose, { type ClientSession } from "mongoose";
 
 import {
   Session,
@@ -95,6 +95,26 @@ export const rotateSession = async (
   });
 
   return newSession;
+};
+
+/*
+ * True when the session an access token names still exists for that
+ * user and organization, and is neither revoked nor expired.
+ */
+export const isSessionActive = async (
+  sessionId: string,
+  userId: string,
+  organizationId: string,
+): Promise<boolean> => {
+  const found = await Session.exists({
+    _id: new mongoose.Types.ObjectId(sessionId),
+    userId: new mongoose.Types.ObjectId(userId),
+    organizationId: new mongoose.Types.ObjectId(organizationId),
+    revokedAt: null,
+    expiresAt: { $gt: new Date() },
+  }).exec();
+
+  return found !== null;
 };
 
 export const revokeSession = async (

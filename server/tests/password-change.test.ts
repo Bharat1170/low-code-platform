@@ -179,7 +179,7 @@ describe("POST /api/auth/change-password", () => {
     ).toBe(true);
   });
 
-  it("keeps already-issued access tokens valid until they expire", async () => {
+  it("rejects already-issued access tokens once their sessions are revoked", async () => {
     const { session } = await setup();
 
     await change(session, {
@@ -191,9 +191,9 @@ describe("POST /api/auth/change-password", () => {
       .get("/api/auth/sessions")
       .set("Authorization", bearer(session.accessToken));
 
-    // Stateless JWT: still accepted. All of its sessions are revoked.
-    expect(res.status).toBe(200);
-    expect(res.body.data.sessions).toEqual([]);
+    // The token is checked against its (now revoked) session.
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("UNAUTHORIZED");
   });
 
   it("writes a PASSWORD_CHANGED audit record without secrets", async () => {
@@ -664,9 +664,9 @@ describe("change-password rate limiting and concurrency", () => {
   it("returns 503 when Redis is unavailable (fails closed)", async () => {
     const { session } = await setup();
 
-    vi.spyOn(redisClient, "incr").mockRejectedValueOnce(
-      new Error("redis down"),
-    );
+    // Every incr fails (the global limiter's store passes on errors; the
+    // change-password limiter must not).
+    vi.spyOn(redisClient, "incr").mockRejectedValue(new Error("redis down"));
 
     const res = await change(session, {
       currentPassword: TEST_PASSWORD,

@@ -788,7 +788,7 @@ describe("DELETE /api/auth/sessions", () => {
     ).toBe(2);
   });
 
-  it("is a no-op without an audit record when nothing is active", async () => {
+  it("rejects the token of a revoked session, without an audit record", async () => {
     const user = await createTestUser();
     const s1 = await createTestSession(user);
 
@@ -801,8 +801,8 @@ describe("DELETE /api/auth/sessions", () => {
       .delete("/api/auth/sessions")
       .set("Authorization", bearer(s1.accessToken));
 
-    expect(res.status).toBe(200);
-    expect(res.body.data.revokedCount).toBe(0);
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("UNAUTHORIZED");
     expect(await AuditLog.countDocuments()).toBe(0);
   });
 });

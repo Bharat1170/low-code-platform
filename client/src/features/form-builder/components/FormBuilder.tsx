@@ -1,5 +1,10 @@
-import { useRef, useState, type ReactNode } from "react";
-import { publishForm, saveFormDraft, type PublishResult } from "../api/forms.api.ts";
+import { useRef, useState, type ComponentProps, type ReactNode } from "react";
+import {
+  publishForm,
+  saveFormDraft,
+  updateFormDetails,
+  type PublishResult,
+} from "../api/forms.api.ts";
 import { useDraftAutosave } from "../hooks/useDraftAutosave.ts";
 import {
   addField,
@@ -14,10 +19,12 @@ import {
 import type { FieldType, FormSchema } from "../types/form-builder.types.ts";
 import { FieldPalette } from "./FieldPalette.tsx";
 import { FormCanvas } from "./FormCanvas.tsx";
+import { FormDetailsEditor, type FormDetails } from "./FormDetailsEditor.tsx";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import type { FormStatusValue } from "../utils/form-status.ts";
 import { FormStatusBadge } from "./FormStatusBadge.tsx";
 import { PublishControl } from "./PublishControl.tsx";
+import { ShareControl } from "./ShareControl.tsx";
 import { TestUserButton, type PreviewWindow } from "./TestUserButton.tsx";
 import { SaveStatus } from "./SaveStatus.tsx";
 import "../styles/form-builder.css";
@@ -48,6 +55,16 @@ interface FormBuilderProps {
   headerExtras?: ReactNode;
   /* Replaces the plain "Forms" breadcrumb, e.g. with a link to the forms list. */
   formsLink?: ReactNode;
+  /* Overrides for the Share dialog (tests); defaults use the real API/browser. */
+  shareHandlers?: Pick<
+    ComponentProps<typeof ShareControl>,
+    "loadPublicId" | "copyText" | "openUrl"
+  >;
+  /* The form's name and description when it was opened. */
+  initialName?: string;
+  initialDescription?: string;
+  /* Saves name + description; defaults to the real Form API. */
+  saveDetails?: (formId: string, details: FormDetails) => Promise<void>;
 }
 
 export function FormBuilder({
@@ -62,6 +79,10 @@ export function FormBuilder({
   openPreviewWindow,
   headerExtras,
   formsLink,
+  shareHandlers,
+  initialName = "Untitled form",
+  initialDescription = "",
+  saveDetails = updateFormDetails,
 }: FormBuilderProps) {
   const [schema, setSchema] = useState<FormSchema>(
     () => initialSchema ?? createEmptyFormSchema(),
@@ -106,6 +127,17 @@ export function FormBuilder({
   const ensureSavedForPublish = async (): Promise<string | null> => {
     const saved = await ensureSaved(targetIdRef.current === undefined);
     return saved ? (targetIdRef.current ?? null) : null;
+  };
+
+  /* Creates the form first if needed (like a draft save), then renames it. */
+  const handleSaveDetails = async (details: FormDetails): Promise<void> => {
+    if (targetIdRef.current === undefined) {
+      const saved = await ensureSaved(true);
+      if (!saved || targetIdRef.current === undefined) {
+        throw new Error("The form could not be created");
+      }
+    }
+    await saveDetails(targetIdRef.current, details);
   };
 
   const handlePublished = (result: PublishResult) => {
@@ -172,6 +204,11 @@ export function FormBuilder({
               publishedSchema !== null && areSchemasEqual(schema, publishedSchema)
             }
           />
+          <ShareControl
+            formId={effectiveFormId}
+            published={formStatus === "PUBLISHED"}
+            {...shareHandlers}
+          />
           <TestUserButton
             prepare={
               createForm || formId !== undefined ? ensureSavedForPublish : undefined
@@ -190,6 +227,14 @@ export function FormBuilder({
           onSelectField={setSelectedFieldId}
           onRemoveField={handleRemoveField}
           onAddFirstField={() => handleAddField("TEXT")}
+          details={
+            <FormDetailsEditor
+              initialName={initialName}
+              initialDescription={initialDescription}
+              onSave={handleSaveDetails}
+              disabled={!persistent}
+            />
+          }
         />
         <PropertiesPanel
           field={selectedField}

@@ -186,14 +186,14 @@ export const refreshAccessToken = (): Promise<string> => {
 };
 
 /*
- * Authenticated request. Uses the in-memory token (refreshing first if
- * there is none) and, on a 401, refreshes ONCE and retries ONCE. A second
- * 401 is returned as an error: there is no refresh loop.
+ * The raw Response of an authenticated request, with the same token and
+ * single refresh-and-retry handling as authorizedRequest. For non-JSON
+ * bodies (e.g. a CSV download); the caller checks response.ok.
  */
-export const authorizedRequest = async (
+export const authorizedFetch = async (
   path: string,
   init: RequestInit = {},
-): Promise<unknown> => {
+): Promise<Response> => {
   const attempt = (token: string): Promise<Response> =>
     send(path, {
       ...init,
@@ -203,12 +203,23 @@ export const authorizedRequest = async (
       },
     });
 
-  let response = await attempt(accessToken ?? (await refreshAccessToken()));
+  const response = await attempt(accessToken ?? (await refreshAccessToken()));
 
-  if (response.status === 401) {
-    response = await attempt(await refreshAccessToken());
-  }
+  return response.status === 401
+    ? attempt(await refreshAccessToken())
+    : response;
+};
 
+/*
+ * Authenticated request. Uses the in-memory token (refreshing first if
+ * there is none) and, on a 401, refreshes ONCE and retries ONCE. A second
+ * 401 is returned as an error: there is no refresh loop.
+ */
+export const authorizedRequest = async (
+  path: string,
+  init: RequestInit = {},
+): Promise<unknown> => {
+  const response = await authorizedFetch(path, init);
   const body = await readEnvelope(response);
 
   if (!response.ok) {

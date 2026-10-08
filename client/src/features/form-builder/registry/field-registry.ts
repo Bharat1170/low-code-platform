@@ -83,6 +83,88 @@ export const FIELD_REGISTRY: FieldRegistry = deepFreeze({
     defaultConfig: { defaultValue: "" },
     defaultValidation: {},
   },
+
+  TEXTAREA: {
+    type: "TEXTAREA",
+    label: "Long text",
+    icon: "textarea",
+    category: "basic",
+    defaultLabel: "Long answer",
+    defaultConfig: { placeholder: "", defaultValue: "" },
+    defaultValidation: {},
+  },
+
+  NUMBER: {
+    type: "NUMBER",
+    label: "Number",
+    icon: "number",
+    category: "basic",
+    defaultLabel: "Number",
+    defaultConfig: { placeholder: "", defaultValue: "" },
+    defaultValidation: {},
+  },
+
+  PHONE: {
+    type: "PHONE",
+    label: "Phone",
+    icon: "phone",
+    category: "basic",
+    defaultLabel: "Phone number",
+    defaultConfig: { placeholder: "", defaultValue: "" },
+    defaultValidation: {},
+  },
+
+  URL: {
+    type: "URL",
+    label: "Website",
+    icon: "url",
+    category: "basic",
+    defaultLabel: "Website",
+    defaultConfig: { placeholder: "https://", defaultValue: "" },
+    defaultValidation: {},
+  },
+
+  RADIO: {
+    type: "RADIO",
+    label: "Single choice",
+    icon: "radio",
+    category: "choice",
+    defaultLabel: "Choose one",
+    defaultConfig: {
+      options: [
+        { label: "Option 1", value: "option-1" },
+        { label: "Option 2", value: "option-2" },
+      ],
+      defaultValue: "",
+    },
+    defaultValidation: {},
+  },
+
+  MULTI_SELECT: {
+    type: "MULTI_SELECT",
+    label: "Multiple choice",
+    icon: "multiselect",
+    category: "choice",
+    defaultLabel: "Choose any",
+    defaultConfig: {
+      options: [
+        { label: "Option 1", value: "option-1" },
+        { label: "Option 2", value: "option-2" },
+      ],
+      defaultValue: [],
+    },
+    defaultValidation: {},
+  },
+
+  RATING: {
+    type: "RATING",
+    label: "Rating",
+    icon: "rating",
+    category: "choice",
+    defaultLabel: "Rating",
+    defaultConfig: { max: 5, defaultValue: 0 },
+    defaultValidation: {},
+  },
 });
 
 /* Type guard for untrusted values. Prototype keys are never field types. */

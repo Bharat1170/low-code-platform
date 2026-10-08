@@ -43,10 +43,18 @@ const publishableSchema = formDraftSchema.superRefine((schema, ctx) => {
       });
     }
 
-    if (field.type === "DROPDOWN" && field.config.options.length === 0) {
+    if (
+      (field.type === "DROPDOWN" ||
+        field.type === "RADIO" ||
+        field.type === "MULTI_SELECT") &&
+      field.config.options.length === 0
+    ) {
       ctx.addIssue({
         code: "custom",
-        message: "A dropdown needs at least one option",
+        message:
+          field.type === "DROPDOWN"
+            ? "A dropdown needs at least one option"
+            : "A choice field needs at least one option",
         path: ["fields", index, "config", "options"],
       });
     }

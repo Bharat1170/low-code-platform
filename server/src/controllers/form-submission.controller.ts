@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { getAuthContext } from "../middleware/auth.middleware.js";
 import {
   deleteFormSubmission as deleteFormSubmissionService,
+  exportFormSubmissions as exportFormSubmissionsService,
   getFormSubmission as getFormSubmissionService,
   listFormSubmissions as listFormSubmissionsService,
   submitForm as submitFormService,
@@ -77,4 +78,29 @@ export const deleteSubmission = async (
   });
 
   sendSuccess(res, 200, "Submission deleted successfully");
+};
+
+
+/* CSV download of a form's submissions (newest first, capped). */
+export const exportSubmissions = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const auth = getAuthContext(req);
+
+  const { id } = submissionFormIdParamSchema.parse(req.params);
+
+  const result = await exportFormSubmissionsService(auth, id, {
+    ipAddress: req.ip ?? "unknown",
+    userAgent: (req.get("user-agent") ?? "unknown").slice(0, 1000),
+  });
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${result.filename}"`,
+  );
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Export-Truncated", result.truncated ? "true" : "false");
+  res.status(200).send(result.csv);
 };

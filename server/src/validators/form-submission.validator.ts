@@ -28,6 +28,8 @@ const FORBIDDEN_KEYS: ReadonlySet<string> = new Set([
 export const MAX_SUBMISSION_FIELDS = MAX_DRAFT_SCHEMA_FIELDS;
 export const MAX_SUBMISSION_STRING_LENGTH = 10_000;
 export const MAX_SUBMISSION_BYTES = MAX_DRAFT_SCHEMA_BYTES;
+export const MAX_SUBMISSION_LIST_ITEMS = 500;
+export const MAX_SUBMISSION_LIST_ITEM_LENGTH = 200;
 
 export const submissionFormIdParamSchema = z
   .object({
@@ -77,21 +79,50 @@ const submissionData = z
             path: [key],
           });
         }
+      } else if (Array.isArray(entry)) {
+        // Multi-select: a bounded list of short strings, nothing nested.
+        if (
+          entry.length > MAX_SUBMISSION_LIST_ITEMS ||
+          !entry.every(
+            (item) =>
+              typeof item === "string" &&
+              item.length <= MAX_SUBMISSION_LIST_ITEM_LENGTH,
+          )
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Value must be a list of options",
+            path: [key],
+          });
+        }
       } else if (typeof entry !== "boolean") {
         ctx.addIssue({
           code: "custom",
-          message: "Value must be a string or a boolean",
+          message: "Value must be a string, a boolean or a list of options",
           path: [key],
         });
       }
     }
   })
-  .transform((value) => ({ ...(value as Record<string, string | boolean>) }));
+  .transform((value) => {
+    // Fresh arrays: the stored value never shares the parsed body's.
+    const copy: SubmissionData = {};
+    for (const [key, entry] of Object.entries(
+      value as Record<string, SubmissionValue>,
+    )) {
+      copy[key] = Array.isArray(entry) ? [...entry] : entry;
+    }
+    return copy;
+  });
 
 export const createSubmissionSchema = z
   .object({ data: submissionData })
   .strict();
 
+/* One submitted value: text, a checkbox, or a multi-select's chosen values. */
+export type SubmissionValue = string | boolean | string[];
+export type SubmissionData = Record<string, SubmissionValue>;
+
 export type CreateSubmissionInput = {
-  data: Record<string, string | boolean>;
+  data: SubmissionData;
 };

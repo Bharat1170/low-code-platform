@@ -17,14 +17,8 @@ const hasFunction = (value: unknown): boolean => {
 };
 
 describe("field registry", () => {
-  it("contains exactly the five supported field types", () => {
-    expect(Object.keys(FIELD_REGISTRY).sort()).toEqual([
-      "CHECKBOX",
-      "DATE",
-      "DROPDOWN",
-      "EMAIL",
-      "TEXT",
-    ]);
+  it("contains exactly the twelve supported field types", () => {
+    expect(Object.keys(FIELD_REGISTRY).sort()).toEqual(["CHECKBOX","DATE","DROPDOWN","EMAIL","MULTI_SELECT","NUMBER","PHONE","RADIO","RATING","TEXT","TEXTAREA","URL"]);
     expect([...FIELD_TYPES].sort()).toEqual(Object.keys(FIELD_REGISTRY).sort());
     expect(listFieldRegistryEntries().map((e) => e.type)).toEqual([
       "TEXT",
@@ -32,6 +26,13 @@ describe("field registry", () => {
       "DROPDOWN",
       "CHECKBOX",
       "DATE",
+      "TEXTAREA",
+      "NUMBER",
+      "PHONE",
+      "URL",
+      "RADIO",
+      "MULTI_SELECT",
+      "RATING",
     ]);
   });
 
@@ -128,7 +129,7 @@ describe("field registry", () => {
 
   it("rejects unknown and prototype-style field types", () => {
     for (const bad of [
-      "NUMBER",
+      "SIGNATURE",
       "text",
       "",
       "constructor",
@@ -143,7 +144,7 @@ describe("field registry", () => {
     }
 
     expect(() =>
-      getFieldRegistryEntry("NUMBER" as unknown as "TEXT"),
+      getFieldRegistryEntry("SIGNATURE" as unknown as "TEXT"),
     ).toThrow(/Unknown field type/);
     expect(() =>
       getFieldRegistryEntry("constructor" as unknown as "TEXT"),

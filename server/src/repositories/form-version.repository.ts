@@ -88,3 +88,22 @@ export const findFormVersionById = async (
     .session(dbSession ?? null)
     .exec();
 };
+
+/* The versions of one form with the given ids (for labelling exports). */
+export const findFormVersionsByIds = async (
+  versionIds: mongoose.Types.ObjectId[],
+  formId: mongoose.Types.ObjectId,
+  organizationId: mongoose.Types.ObjectId,
+): Promise<IFormVersion[]> => {
+  if (versionIds.length === 0) {
+    return [];
+  }
+
+  return FormVersion.find({
+    _id: { $in: versionIds.map(safeObjectId) },
+    formId: safeObjectId(formId),
+    organizationId: safeObjectId(organizationId),
+  })
+    .sort({ version: -1 })
+    .exec();
+};

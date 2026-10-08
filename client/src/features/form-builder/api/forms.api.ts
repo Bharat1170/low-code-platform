@@ -4,7 +4,9 @@ import {
   clearAccessToken,
 } from "../../../lib/http.ts";
 import type { FormSchema } from "../types/form-builder.types.ts";
+import type { FieldValues } from "../../form-renderer/types/form-renderer.types.ts";
 import { isFormSchema } from "../utils/form-schema.validate.ts";
+import { isValidPublicId } from "../utils/share-url.ts";
 
 /*
  * Minimal client for the Form API (8.17.11). HTTP, the in-memory access
@@ -17,11 +19,14 @@ export { ApiError, clearAccessToken };
 export interface FormRecord {
   id: string;
   name: string;
+  description: string;
   status: string;
   /* Untrusted until validated with isFormSchema. */
   draftSchema: unknown;
   /* True once the form has a published version. */
   hasPublishedVersion?: boolean;
+  /* Server-issued public identifier; only present for a published form. */
+  publicId?: string;
 }
 
 /* POST /forms/:id/publish response `data` (8.17.13). */
@@ -49,6 +54,7 @@ const toFormRecord = (body: unknown): FormRecord => {
   return {
     id: form._id,
     name: typeof form.name === "string" ? form.name : "",
+    description: typeof form.description === "string" ? form.description : "",
     status: typeof form.status === "string" ? form.status : "",
     draftSchema: form.draftSchema,
     // Only present when true, so unpublished records keep their original shape.
@@ -56,6 +62,8 @@ const toFormRecord = (body: unknown): FormRecord => {
     form.publishedVersionId !== ""
       ? { hasPublishedVersion: true }
       : {}),
+    // Only an identifier of the exact generated shape is ever trusted.
+    ...(isValidPublicId(form.publicId) ? { publicId: form.publicId } : {}),
   };
 };
 
@@ -63,6 +71,16 @@ export const fetchForm = async (formId: string): Promise<FormRecord> => {
   return toFormRecord(
     await authorizedRequest(`/forms/${encodeURIComponent(formId)}`),
   );
+};
+
+/*
+ * The public identifier of a published form, or null when it has none.
+ * Reads the existing authenticated form endpoint, which also issues an
+ * identifier for forms published before identifiers existed.
+ */
+export const fetchPublicId = async (formId: string): Promise<string | null> => {
+  const form = await fetchForm(formId);
+  return form.publicId ?? null;
 };
 
 /*
@@ -76,6 +94,21 @@ export const saveFormDraft = async (
   await authorizedRequest(`/forms/${encodeURIComponent(formId)}`, {
     method: "PATCH",
     body: JSON.stringify({ draftSchema: schema }),
+  });
+};
+
+/*
+ * Renames the form / changes its description. Sent separately from the
+ * draft (the server rejects draftSchema mixed with other keys). Visible to
+ * respondents on the public page right away; the schema is untouched.
+ */
+export const updateFormDetails = async (
+  formId: string,
+  details: { name: string; description: string },
+): Promise<void> => {
+  await authorizedRequest(`/forms/${encodeURIComponent(formId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name: details.name, description: details.description }),
   });
 };
 
@@ -175,7 +208,7 @@ export interface SubmissionReceipt {
  */
 export const submitForm = async (
   formId: string,
-  data: Record<string, string | boolean>,
+  data: FieldValues,
 ): Promise<SubmissionReceipt> => {
   const body = await authorizedRequest(
     `/forms/${encodeURIComponent(formId)}/submissions`,

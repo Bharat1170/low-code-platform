@@ -9,6 +9,13 @@ const TYPE_HINTS: Record<FieldType, string> = {
   DROPDOWN: "Choose from a list",
   CHECKBOX: "Yes or no option",
   DATE: "Pick a date",
+  TEXTAREA: "Multi-line answer",
+  NUMBER: "Numeric value",
+  PHONE: "Phone number",
+  URL: "Web address",
+  RADIO: "Pick one option",
+  MULTI_SELECT: "Pick several options",
+  RATING: "1 to 5 stars",
 };
 
 interface FieldPaletteProps {

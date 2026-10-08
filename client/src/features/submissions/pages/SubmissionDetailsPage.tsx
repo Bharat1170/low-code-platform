@@ -11,6 +11,7 @@ import {
   formatDateTime,
   shortId,
   submissionsErrorMessage,
+  submitterLabel,
 } from "../utils/submissions.format.ts";
 import "../../form-builder/styles/form-builder.css";
 import "../styles/submissions.css";
@@ -146,7 +147,9 @@ export function SubmissionDetailsPage() {
           </div>
           <div>
             <dt>Submitted by</dt>
-            <dd>{submission.submittedByName ?? "Unknown user"}</dd>
+            <dd>
+              {submitterLabel(submission.submittedBy, submission.submittedByName)}
+            </dd>
           </div>
           <div>
             <dt>Submitted at</dt>

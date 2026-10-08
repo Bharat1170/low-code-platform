@@ -941,18 +941,18 @@ describe("8.15.12 final authentication acceptance", () => {
       expect(audits[0]?.metadata).toEqual({});
       expect(audits[0]?.organizationId.toString()).toBe(alice.organizationId);
 
-      // Old password fails, new one works; the stateless access token
-      // stays valid until expiry (accepted design).
+      // Old password fails; the access token of a revoked session is
+      // rejected at once (it is checked against its session).
       const stale = await request(app)
         .post("/api/auth/login")
         .send({ email: alice.email, password: resetPassword });
       expect(stale.status).toBe(401);
 
-      const stillValid = await request(app)
+      const revokedToken = await request(app)
         .get("/api/auth/sessions")
         .set("Authorization", bearer(aliceAfterReset.accessToken));
-      expect(stillValid.status).toBe(200);
-      expect(stillValid.body.data.sessions).toEqual([]);
+      expect(revokedToken.status).toBe(401);
+      expectStandardError(revokedToken.body as ErrorBody, "UNAUTHORIZED");
     });
 
     // ===================================================================
@@ -1204,15 +1204,14 @@ describe("8.15.12 final authentication acceptance", () => {
       expect(forgedChange.status).toBe(401);
       expectStandardError(forgedChange.body as ErrorBody, "UNAUTHORIZED");
 
-      // Session routes (authenticate only, accepted design) answer, but
-      // every query is scoped by userId AND organizationId, so the
-      // mismatched context sees nothing and reaches none of B's data.
+      // Session routes refuse it too: the token names no live session of
+      // that user in that organization, so it never reaches B's data.
       const forgedList = await request(app)
         .get("/api/auth/sessions")
         .set("Authorization", bearer(forged));
 
-      expect(forgedList.status).toBe(200);
-      expect(forgedList.body.data.sessions).toEqual([]);
+      expect(forgedList.status).toBe(401);
+      expectStandardError(forgedList.body as ErrorBody, "UNAUTHORIZED");
       expect(JSON.stringify(forgedList.body)).not.toContain(
         bobActiveSessionId,
       );
@@ -1221,7 +1220,7 @@ describe("8.15.12 final authentication acceptance", () => {
         .delete(`/api/auth/sessions/${bobActiveSessionId}`)
         .set("Authorization", bearer(forged));
 
-      expect(forgedRevoke.status).toBe(404);
+      expect(forgedRevoke.status).toBe(401);
       expect(
         (await Session.findById(bobActiveSessionId).exec())?.revokedAt ??
           null,

@@ -1,5 +1,9 @@
-/* Value a person has entered for one field. Never stored in the schema. */
-export type FieldValue = string | boolean;
+/*
+ * Value a person has entered for one field. Never stored in the schema.
+ * Checkbox: boolean; multiple choice: the chosen option values; anything
+ * else (including numbers and ratings): text.
+ */
+export type FieldValue = string | boolean | string[];
 
 export type FieldValues = Record<string, FieldValue>;
 export type FieldErrors = Record<string, string>;
@@ -20,6 +24,4 @@ export type SubmitResult =
   | { ok: true; summary: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string> };
 
-export type FormSubmitHandler = (
-  values: Record<string, string | boolean>,
-) => Promise<SubmitResult>;
+export type FormSubmitHandler = (values: FieldValues) => Promise<SubmitResult>;

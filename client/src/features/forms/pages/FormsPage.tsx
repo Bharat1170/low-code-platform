@@ -4,6 +4,7 @@ import { AccountMenu } from "../../auth/components/AccountMenu.tsx";
 import {
   ApiError,
   listForms,
+  MAX_FORMS_PAGE_SIZE,
   type FormSummary,
 } from "../../form-builder/api/forms.api.ts";
 import { formatDateTime } from "../../submissions/utils/submissions.format.ts";
@@ -39,6 +40,34 @@ const STATUS_LABELS: Record<string, string> = {
 const builderPath = (id: string): string => `/?formId=${encodeURIComponent(id)}`;
 const submissionsPath = (id: string): string =>
   `/forms/${encodeURIComponent(id)}/submissions`;
+
+/*
+ * How many of the loaded forms are published. The list is one page of up
+ * to MAX_FORMS_PAGE_SIZE forms, so a full page means "at least" (shown n+).
+ */
+function FormsSummary({ forms }: { forms: FormSummary[] }) {
+  const published = forms.filter((form) => form.status === "PUBLISHED").length;
+  const more = forms.length >= MAX_FORMS_PAGE_SIZE ? "+" : "";
+
+  return (
+    <div className="forms-summary" role="group" aria-label="Form totals">
+      <p className="forms-stat" data-stat="published">
+        <strong className="forms-stat-value">
+          {published}
+          {more}
+        </strong>
+        <span className="forms-stat-label">published</span>
+      </p>
+      <p className="forms-stat" data-stat="total">
+        <strong className="forms-stat-value">
+          {forms.length}
+          {more}
+        </strong>
+        <span className="forms-stat-label">total</span>
+      </p>
+    </div>
+  );
+}
 
 /*
  * Every form of the signed-in organization, newest first. Each row opens
@@ -110,6 +139,10 @@ export function FormsPage() {
             Create a form
           </Link>
         </div>
+      )}
+
+      {state.kind === "ready" && state.forms.length > 0 && (
+        <FormsSummary forms={state.forms} />
       )}
 
       {state.kind === "ready" && state.forms.length > 0 && (

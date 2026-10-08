@@ -1,5 +1,5 @@
 import type { FormFieldDefinition } from "../../form-builder/types/form-builder.types.ts";
-import { ApiError } from "../api/submissions.api.ts";
+import { ApiError, type SubmissionValue } from "../api/submissions.api.ts";
 
 /* Last 8 characters: short enough to scan, still distinguishable. */
 export const shortId = (id: string): string => id.slice(-8);
@@ -36,21 +36,46 @@ export const submissionsErrorMessage = (error: unknown): string => {
 /* A submitted value as text. Never markup. */
 export const displayValue = (
   field: FormFieldDefinition | undefined,
-  value: string | boolean | undefined,
+  value: SubmissionValue | undefined,
 ): string => {
   if (value === undefined) return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (value === "") return "—";
 
-  if (field?.type === "DROPDOWN" && Array.isArray(field.config?.options)) {
-    const option = field.config.options.find((o) => o.value === value);
-    if (option && option.label !== option.value) {
-      return `${option.label} (${value})`;
-    }
+  const options =
+    (field?.type === "DROPDOWN" ||
+      field?.type === "RADIO" ||
+      field?.type === "MULTI_SELECT") &&
+    Array.isArray(field.config?.options)
+      ? field.config.options
+      : [];
+
+  const labelled = (item: string): string => {
+    const option = options.find((o) => o.value === item);
+    return option && option.label !== option.value
+      ? `${option.label} (${item})`
+      : item;
+  };
+
+  if (Array.isArray(value)) {
+    return value.length === 0 ? "—" : value.map(labelled).join(", ");
   }
 
-  return value;
+  if (value === "") return "—";
+
+  if (field?.type === "RATING") {
+    const scale = typeof field.config?.max === "number" ? field.config.max : 5;
+    return `${value} / ${scale}`;
+  }
+
+  return labelled(value);
 };
+
+/* Who submitted, for lists and details; public-link answers have no user. */
+export const submitterLabel = (
+  submittedBy: string | null,
+  submittedByName: string | null,
+): string =>
+  submittedBy === null ? "Anonymous" : (submittedByName ?? "Unknown user");
 
 export const FIELD_TYPE_LABELS: Record<string, string> = {
   TEXT: "Text",
@@ -58,6 +83,13 @@ export const FIELD_TYPE_LABELS: Record<string, string> = {
   DROPDOWN: "Dropdown",
   CHECKBOX: "Checkbox",
   DATE: "Date",
+  TEXTAREA: "Long text",
+  NUMBER: "Number",
+  PHONE: "Phone",
+  URL: "Website",
+  RADIO: "Single choice",
+  MULTI_SELECT: "Multiple choice",
+  RATING: "Rating",
 };
 
 /* Safe, user-facing text for a failed delete; never the backend's message. */

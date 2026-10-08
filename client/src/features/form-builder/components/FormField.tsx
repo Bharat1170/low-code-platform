@@ -79,6 +79,94 @@ function FieldPreview({ field }: { field: FormFieldDefinition }) {
         </div>
       );
 
+    case "TEXTAREA":
+      return (
+        <div className="fb-preview">
+          <label className="fb-preview-label" htmlFor={controlId}>
+            {field.label}
+          </label>
+          <textarea
+            id={controlId}
+            className="fb-control fr-textarea"
+            rows={3}
+            placeholder={field.config.placeholder}
+            value={field.config.defaultValue}
+            readOnly
+            tabIndex={-1}
+          />
+        </div>
+      );
+
+    case "NUMBER":
+    case "PHONE":
+    case "URL":
+      return (
+        <div className="fb-preview">
+          <label className="fb-preview-label" htmlFor={controlId}>
+            {field.label}
+          </label>
+          <input
+            id={controlId}
+            className="fb-control"
+            type={field.type === "PHONE" ? "tel" : field.type === "URL" ? "url" : "text"}
+            placeholder={field.config.placeholder}
+            value={field.config.defaultValue}
+            readOnly
+            tabIndex={-1}
+          />
+        </div>
+      );
+
+    case "RADIO":
+    case "MULTI_SELECT":
+      return (
+        <div className="fb-preview">
+          <span className="fb-preview-label">{field.label}</span>
+          <ul className="fb-preview-choices">
+            {field.config.options.map((option) => {
+              const on =
+                field.type === "RADIO"
+                  ? field.config.defaultValue === option.value
+                  : field.config.defaultValue.includes(option.value);
+              return (
+                <li key={option.value}>
+                  <input
+                    type={field.type === "RADIO" ? "radio" : "checkbox"}
+                    checked={on}
+                    readOnly
+                    disabled
+                    tabIndex={-1}
+                    aria-label={option.label}
+                  />
+                  <span>{option.label}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      );
+
+    case "RATING":
+      return (
+        <div className="fb-preview">
+          <span className="fb-preview-label">{field.label}</span>
+          <span
+            className="fb-preview-stars"
+            aria-label={`Rating out of ${field.config.max}`}
+          >
+            {Array.from({ length: field.config.max }, (_, index) => (
+              <span
+                key={index}
+                aria-hidden="true"
+                data-on={index < field.config.defaultValue ? "true" : undefined}
+              >
+                ★
+              </span>
+            ))}
+          </span>
+        </div>
+      );
+
     case "CHECKBOX":
       return (
         <div className="fb-preview fb-preview-checkbox">

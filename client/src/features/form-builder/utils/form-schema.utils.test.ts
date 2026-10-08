@@ -102,7 +102,7 @@ describe("createFieldDefinition", () => {
 
   it("rejects an unknown field type", () => {
     expect(() =>
-      createFieldDefinition("NUMBER" as unknown as "TEXT", "n"),
+      createFieldDefinition("SIGNATURE" as unknown as "TEXT", "n"),
     ).toThrow(/Unknown field type/);
   });
 

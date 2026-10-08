@@ -1,0 +1,61 @@
+.pf-page {
+  min-height: 100vh;
+  padding: 48px 16px;
+  background: var(--builder-bg);
+  color: var(--builder-text);
+  box-sizing: border-box;
+}
+
+.pf-card {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 32px;
+  background: var(--builder-surface);
+  border: 1px solid var(--builder-border);
+  border-radius: var(--builder-radius);
+  box-shadow: var(--builder-shadow);
+  border-top: 4px solid var(--builder-accent);
+}
+
+.pf-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--builder-border);
+}
+
+.pf-title {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.pf-text {
+  margin: 0 0 12px;
+  color: var(--builder-muted);
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.pf-message {
+  text-align: center;
+  padding: 24px 0;
+}
+
+.pf-footer {
+  max-width: 640px;
+  margin: 16px auto 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--builder-muted);
+}
+
+@media (max-width: 640px) {
+  .pf-page {
+    padding: 16px;
+  }
+
+  .pf-card {
+    padding: 20px 16px;
+  }
+}

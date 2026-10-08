@@ -50,6 +50,8 @@ const validationRules = z
       }, "Pattern is not valid")
       .optional(),
     email: z.boolean().optional(),
+    // NUMBER fields only: whole numbers.
+    integer: z.boolean().optional(),
     // DATE fields only (checked per field below): real "YYYY-MM-DD" dates.
     minDate: dateOnly("minDate").optional(),
     maxDate: dateOnly("maxDate").optional(),
@@ -104,6 +106,30 @@ const textConfig = z
   })
   .strict();
 
+export const MAX_TEXTAREA_LENGTH = 10_000;
+export const MIN_RATING_SCALE = 3;
+export const MAX_RATING_SCALE = 10;
+
+const textareaConfig = z
+  .object({
+    placeholder: z.string().max(200),
+    defaultValue: z.string().max(MAX_TEXTAREA_LENGTH),
+  })
+  .strict();
+
+/* A number is kept as its decimal text, the same as it is submitted. */
+export const NUMBER_TEXT = /^-?\d+(\.\d+)?$/;
+
+const numberConfig = z
+  .object({
+    placeholder: z.string().max(200),
+    defaultValue: z.union([
+      z.literal(""),
+      z.string().max(32).regex(NUMBER_TEXT, "defaultValue must be a number"),
+    ]),
+  })
+  .strict();
+
 const dropdownOption = z
   .object({
     label: z.string().min(1).max(200),
@@ -111,32 +137,80 @@ const dropdownOption = z
   })
   .strict();
 
+const options = z.array(dropdownOption).max(MAX_OPTIONS);
+
+/* Option values are unique; every default must name an option. */
+const checkOptions = (
+  config: { options: { value: string }[]; defaultValue: string | string[] },
+  ctx: z.RefinementCtx,
+): void => {
+  const values = new Set<string>();
+
+  for (const option of config.options) {
+    if (values.has(option.value)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Duplicate option value "${option.value}"`,
+      });
+    }
+    values.add(option.value);
+  }
+
+  const defaults = Array.isArray(config.defaultValue)
+    ? config.defaultValue
+    : config.defaultValue === ""
+      ? []
+      : [config.defaultValue];
+
+  if (defaults.some((value) => !values.has(value))) {
+    ctx.addIssue({
+      code: "custom",
+      message: "defaultValue must match an option value",
+    });
+  }
+
+  if (new Set(defaults).size !== defaults.length) {
+    ctx.addIssue({
+      code: "custom",
+      message: "defaultValue must not repeat an option",
+    });
+  }
+};
+
 const dropdownConfig = z
   .object({
     placeholder: z.string().max(200),
-    options: z.array(dropdownOption).max(MAX_OPTIONS),
+    options,
     defaultValue: z.string().max(1000),
   })
   .strict()
-  .superRefine((config, ctx) => {
-    const values = new Set<string>();
+  .superRefine(checkOptions);
 
-    for (const option of config.options) {
-      if (values.has(option.value)) {
-        ctx.addIssue({
-          code: "custom",
-          message: `Duplicate option value "${option.value}"`,
-        });
-      }
-      values.add(option.value);
-    }
+const radioConfig = z
+  .object({
+    options,
+    defaultValue: z.string().max(1000),
+  })
+  .strict()
+  .superRefine(checkOptions);
 
-    if (config.defaultValue !== "" && !values.has(config.defaultValue)) {
-      ctx.addIssue({
-        code: "custom",
-        message: "defaultValue must match an option value",
-      });
-    }
+const multiSelectConfig = z
+  .object({
+    options,
+    defaultValue: z.array(z.string().max(200)).max(MAX_OPTIONS),
+  })
+  .strict()
+  .superRefine(checkOptions);
+
+const ratingConfig = z
+  .object({
+    max: z.number().int().min(MIN_RATING_SCALE).max(MAX_RATING_SCALE),
+    // 0 = no default rating.
+    defaultValue: z.number().int().min(0).max(MAX_RATING_SCALE),
+  })
+  .strict()
+  .refine((config) => config.defaultValue <= config.max, {
+    message: "defaultValue must not exceed max",
   });
 
 const checkboxConfig = z
@@ -175,6 +249,35 @@ const formField = z.discriminatedUnion("type", [
   z
     .object({ ...baseField, type: z.literal("DATE"), config: dateConfig })
     .strict(),
+  z
+    .object({
+      ...baseField,
+      type: z.literal("TEXTAREA"),
+      config: textareaConfig,
+    })
+    .strict(),
+  z
+    .object({ ...baseField, type: z.literal("NUMBER"), config: numberConfig })
+    .strict(),
+  z
+    .object({ ...baseField, type: z.literal("PHONE"), config: textConfig })
+    .strict(),
+  z
+    .object({ ...baseField, type: z.literal("URL"), config: textConfig })
+    .strict(),
+  z
+    .object({ ...baseField, type: z.literal("RADIO"), config: radioConfig })
+    .strict(),
+  z
+    .object({
+      ...baseField,
+      type: z.literal("MULTI_SELECT"),
+      config: multiSelectConfig,
+    })
+    .strict(),
+  z
+    .object({ ...baseField, type: z.literal("RATING"), config: ratingConfig })
+    .strict(),
 ]);
 
 export const formDraftSchema = z
@@ -187,6 +290,33 @@ export const formDraftSchema = z
     const seen = new Set<string>();
 
     schema.fields.forEach((field, index) => {
+      if (field.validation.integer !== undefined && field.type !== "NUMBER") {
+        ctx.addIssue({
+          code: "custom",
+          message: "integer is only valid for NUMBER fields",
+          path: ["fields", index, "validation"],
+        });
+      }
+
+      if (field.type === "NUMBER") {
+        const value = field.config.defaultValue;
+        const { min, max, integer } = field.validation;
+        const number = Number(value);
+
+        if (
+          value !== "" &&
+          ((min !== undefined && number < min) ||
+            (max !== undefined && number > max) ||
+            (integer === true && !Number.isInteger(number)))
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            message: "defaultValue must satisfy the number rules",
+            path: ["fields", index, "config", "defaultValue"],
+          });
+        }
+      }
+
       const { minDate, maxDate } = field.validation;
 
       if (field.type !== "DATE") {

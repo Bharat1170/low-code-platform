@@ -3,8 +3,15 @@ import { getFieldRegistryEntry } from "../registry/field-registry.ts";
 import type {
   DropdownFieldDefinition,
   FormFieldDefinition,
+  MultiSelectFieldDefinition,
+  RadioFieldDefinition,
   ValidationConfig,
 } from "../types/form-builder.types.ts";
+import {
+  MAX_RATING_SCALE,
+  MIN_RATING_SCALE,
+  NUMBER_TEXT,
+} from "../utils/form-schema.validate.ts";
 import { isValidDateOnly } from "../utils/date-only.ts";
 import type { FieldChanges } from "../utils/form-schema.utils.ts";
 
@@ -183,12 +190,15 @@ function LengthProperty({
   otherBound,
   kind,
   onCommit,
+  noun = "length",
 }: {
   label: string;
   value: number | undefined;
   otherBound: number | undefined;
   kind: "min" | "max";
   onCommit: (value: number | undefined) => void;
+  /* What is bounded, for messages ("length", "selections"). */
+  noun?: string;
 }) {
   const id = useId();
   const errorId = `${id}-error`;
@@ -213,11 +223,11 @@ function LengthProperty({
 
     if (otherBound !== undefined) {
       if (kind === "min" && parsed > otherBound) {
-        setError("Minimum length cannot exceed maximum length.");
+        setError(`Minimum ${noun} cannot exceed maximum ${noun}.`);
         return;
       }
       if (kind === "max" && parsed < otherBound) {
-        setError("Maximum length cannot be less than minimum length.");
+        setError(`Maximum ${noun} cannot be less than minimum ${noun}.`);
         return;
       }
     }
@@ -252,25 +262,147 @@ function LengthProperty({
   );
 }
 
+/*
+ * Decimal bound for a NUMBER field. Same draft/commit behaviour as
+ * LengthProperty: an empty draft clears the bound, an invalid one is shown
+ * and never reaches the schema.
+ */
+function NumberBoundProperty({
+  label,
+  value,
+  otherBound,
+  kind,
+  onCommit,
+}: {
+  label: string;
+  value: number | undefined;
+  otherBound: number | undefined;
+  kind: "min" | "max";
+  onCommit: (value: number | undefined) => void;
+}) {
+  const id = useId();
+  const errorId = `${id}-error`;
+  const [draft, setDraft] = useState(value === undefined ? "" : String(value));
+  const [error, setError] = useState<string | null>(null);
+
+  const handleChange = (raw: string) => {
+    setDraft(raw);
+    const text = raw.trim();
+
+    if (text === "") {
+      setError(null);
+      onCommit(undefined);
+      return;
+    }
+    if (!NUMBER_TEXT.test(text) || text.length > 32) {
+      setError("Enter a number, e.g. 10 or 2.5.");
+      return;
+    }
+
+    const parsed = Number(text);
+    if (otherBound !== undefined) {
+      if (kind === "min" && parsed > otherBound) {
+        setError("Minimum cannot exceed maximum.");
+        return;
+      }
+      if (kind === "max" && parsed < otherBound) {
+        setError("Maximum cannot be less than minimum.");
+        return;
+      }
+    }
+
+    setError(null);
+    onCommit(parsed);
+  };
+
+  return (
+    <div className="fb-prop">
+      <label className="fb-prop-label" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        className="fb-control"
+        type="text"
+        inputMode="decimal"
+        value={draft}
+        aria-invalid={error !== null}
+        aria-describedby={error ? errorId : undefined}
+        onChange={(event) => handleChange(event.target.value)}
+      />
+      {error && (
+        <p id={errorId} className="fb-prop-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* A small select of whole numbers (rating scale and default). */
+function SelectNumberProperty({
+  label,
+  value,
+  from,
+  to,
+  zeroLabel,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  from: number;
+  to: number;
+  /* Shown for 0 instead of the number (e.g. "No default"). */
+  zeroLabel?: string;
+  onChange: (value: number) => void;
+}) {
+  const id = useId();
+
+  return (
+    <div className="fb-prop">
+      <label className="fb-prop-label" htmlFor={id}>
+        {label}
+      </label>
+      <select
+        id={id}
+        className="fb-control fb-control-select"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      >
+        {Array.from({ length: to - from + 1 }, (_, index) => from + index).map(
+          (n) => (
+            <option key={n} value={n}>
+              {n === 0 && zeroLabel ? zeroLabel : n}
+            </option>
+          ),
+        )}
+      </select>
+    </div>
+  );
+}
+
 /* ---------- Dropdown options ---------- */
 
 function OptionsEditor({
   field,
   onUpdateField,
 }: {
-  field: DropdownFieldDefinition;
+  field: DropdownFieldDefinition | RadioFieldDefinition | MultiSelectFieldDefinition;
   onUpdateField: UpdateFieldHandler;
 }) {
-  const { options, defaultValue } = field.config;
+  const { options } = field.config;
 
   const commit = (nextOptions: typeof options) => {
     // Never leave a default pointing at an option that no longer exists.
-    const stillValid = nextOptions.some((o) => o.value === defaultValue);
+    const exists = (value: string) => nextOptions.some((o) => o.value === value);
+    const defaultValue =
+      field.type === "MULTI_SELECT"
+        ? field.config.defaultValue.filter(exists)
+        : exists(field.config.defaultValue)
+          ? field.config.defaultValue
+          : "";
     onUpdateField(field.id, {
-      config: {
-        options: nextOptions,
-        defaultValue: stillValid ? defaultValue : "",
-      },
+      config: { options: nextOptions, defaultValue },
     });
   };
 
@@ -399,8 +531,8 @@ export function PropertiesPanel({ field, onUpdateField }: PropertiesPanelProps) 
   const update = (changes: FieldChanges) => onUpdateField(field.id, changes);
 
   const updateValidation = (
-    key: "minLength" | "maxLength" | "minDate" | "maxDate",
-    value: number | string | undefined,
+    key: "minLength" | "maxLength" | "minDate" | "maxDate" | "min" | "max" | "integer",
+    value: number | string | boolean | undefined,
   ) => {
     // Spread keeps every other rule; an undefined limit removes only its own key.
     const next: ValidationConfig = { ...field.validation };
@@ -440,7 +572,11 @@ export function PropertiesPanel({ field, onUpdateField }: PropertiesPanelProps) 
         />
       </Section>
 
-      {(field.type === "TEXT" || field.type === "EMAIL") && (
+      {(field.type === "TEXT" ||
+        field.type === "EMAIL" ||
+        field.type === "TEXTAREA" ||
+        field.type === "PHONE" ||
+        field.type === "URL") && (
         <>
           <Section title="Input">
             <TextProperty
@@ -473,9 +609,92 @@ export function PropertiesPanel({ field, onUpdateField }: PropertiesPanelProps) 
         </>
       )}
 
-      {field.type === "DROPDOWN" && (
+      {field.type === "NUMBER" && (
+        <>
+          <Section title="Input">
+            <TextProperty
+              label="Placeholder"
+              value={field.config.placeholder}
+              onChange={(placeholder) => update({ config: { placeholder } })}
+            />
+          </Section>
+          <Section title="Validation">
+            <NumberBoundProperty
+              label="Minimum value"
+              kind="min"
+              value={field.validation.min}
+              otherBound={field.validation.max}
+              onCommit={(v) => updateValidation("min", v)}
+            />
+            <NumberBoundProperty
+              label="Maximum value"
+              kind="max"
+              value={field.validation.max}
+              otherBound={field.validation.min}
+              onCommit={(v) => updateValidation("max", v)}
+            />
+            <ToggleProperty
+              label="Whole numbers only"
+              checked={field.validation.integer === true}
+              onChange={(on) => updateValidation("integer", on ? true : undefined)}
+            />
+          </Section>
+        </>
+      )}
+
+      {(field.type === "DROPDOWN" ||
+        field.type === "RADIO" ||
+        field.type === "MULTI_SELECT") && (
         <Section title="Options">
           <OptionsEditor field={field} onUpdateField={onUpdateField} />
+        </Section>
+      )}
+
+      {field.type === "MULTI_SELECT" && (
+        <Section title="Validation">
+          <LengthProperty
+            label="Minimum selections"
+            kind="min"
+            noun="selections"
+            value={field.validation.min}
+            otherBound={field.validation.max}
+            onCommit={(v) => updateValidation("min", v)}
+          />
+          <LengthProperty
+            label="Maximum selections"
+            kind="max"
+            noun="selections"
+            value={field.validation.max}
+            otherBound={field.validation.min}
+            onCommit={(v) => updateValidation("max", v)}
+          />
+        </Section>
+      )}
+
+      {field.type === "RATING" && (
+        <Section title="Scale">
+          <SelectNumberProperty
+            label="Number of stars"
+            value={field.config.max}
+            from={MIN_RATING_SCALE}
+            to={MAX_RATING_SCALE}
+            onChange={(max) =>
+              update({
+                config: {
+                  max,
+                  defaultValue: Math.min(field.config.defaultValue, max),
+                },
+              })
+            }
+          />
+          <SelectNumberProperty
+            label="Default rating"
+            value={field.config.defaultValue}
+            from={0}
+            to={field.config.max}
+            zeroLabel="No default"
+            onChange={(defaultValue) => update({ config: { defaultValue } })}
+          />
         </Section>
       )}
 
