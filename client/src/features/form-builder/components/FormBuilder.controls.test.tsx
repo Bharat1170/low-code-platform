@@ -75,10 +75,9 @@ const addEmail = (user: ReturnType<typeof userEvent.setup>) =>
   user.click(screen.getByRole("button", { name: "Add Email field" }));
 
 describe("status badge", () => {
-  it("shows Draft for a DRAFT form", () => {
+  it("shows no status badge for a DRAFT form", () => {
     mount({ initialStatus: "DRAFT" });
-    expect(badge().textContent).toBe("Draft");
-    expect(badge().getAttribute("data-status")).toBe("DRAFT");
+    expect(document.querySelector(".fb-form-status")).toBeNull();
   });
 
   it("shows Published for a PUBLISHED form", () => {
@@ -93,7 +92,7 @@ describe("status badge", () => {
   });
 
   it("is not a control", () => {
-    mount();
+    mount({ initialStatus: "PUBLISHED" });
     expect(badge().closest("button")).toBeNull();
     expect(badge().getAttribute("tabindex")).toBeNull();
   });

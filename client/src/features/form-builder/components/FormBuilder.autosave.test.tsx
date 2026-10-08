@@ -514,7 +514,7 @@ describe("status indicator", () => {
     render(<FormBuilder />);
 
     expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(document.querySelector(".fb-form-status")).toBeNull();
     expect((saveButton() as HTMLButtonElement).disabled).toBe(true);
   });
 });

@@ -207,7 +207,7 @@ describe("Publish with a persisted form", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("nothing was published");
     expect(publish).not.toHaveBeenCalled();
-    expect(badge().textContent).toBe("Draft");
+    expect(document.querySelector(".fb-form-status")).toBeNull();
     expect(screen.getAllByRole("button", { name: /^Select / })).toHaveLength(2);
   });
 
@@ -224,7 +224,7 @@ describe("Publish with a persisted form", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Field 1: Field label is required");
-    expect(badge().textContent).toBe("Draft");
+    expect(document.querySelector(".fb-form-status")).toBeNull();
   });
 
   it("does not offer a second publish of an unchanged draft", async () => {

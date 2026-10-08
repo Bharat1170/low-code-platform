@@ -141,7 +141,9 @@ export function FormBuilder({
           <h1 className="fb-title">Form Builder</h1>
         </div>
         <div className="fb-header-right">
-          <FormStatusBadge status={formStatus} version={publishedVersion} />
+          {formStatus !== "DRAFT" && (
+            <FormStatusBadge status={formStatus} version={publishedVersion} />
+          )}
           {persistent && <SaveStatus status={status} />}
           <button
             type="button"
