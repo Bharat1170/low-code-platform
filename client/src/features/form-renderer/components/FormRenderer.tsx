@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type {
   FormFieldDefinition,
   FormSchema,
@@ -8,6 +8,7 @@ import type {
   FieldValue,
   FieldValues,
   FormRendererMode,
+  FormSubmitHandler,
 } from "../types/form-renderer.types.ts";
 import {
   defaultValueFor,
@@ -22,6 +23,14 @@ import "../styles/form-renderer.css";
 interface FormRendererProps {
   schema: FormSchema;
   mode: FormRendererMode;
+  /*
+   * When given, a valid submit sends the values through it (the caller
+   * decides where). Without it the renderer only validates locally and
+   * shows a local confirmation, as in the builder preview.
+   */
+  onSubmit?: FormSubmitHandler;
+  /* Extra actions shown next to "Submit another response" after success. */
+  successActions?: ReactNode;
 }
 
 /*
@@ -30,8 +39,10 @@ interface FormRendererProps {
  * state, so it can never change the schema, autosave, publish or submit
  * anything. Labels, descriptions and options are rendered as text.
  *
- * Submitting validates locally and shows a local confirmation only;
- * nothing is persisted yet.
+ * Without onSubmit, submitting validates locally and shows a local
+ * confirmation only; nothing is persisted. With onSubmit, a valid submit is
+ * handed to it, and the result (success, or a message plus optional
+ * per-field errors from the server) is shown here.
  */
 
 interface FieldViewProps {
@@ -186,11 +197,21 @@ function FieldView({
   );
 }
 
-export function FormRenderer({ schema, mode }: FormRendererProps) {
+export function FormRenderer({
+  schema,
+  mode,
+  onSubmit,
+  successActions,
+}: FormRendererProps) {
   const [entered, setEntered] = useState<FieldValues>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
   const [succeeded, setSucceeded] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
+  const sendingRef = useRef(false);
 
   // Unsupported or malformed fields are skipped rather than crashing.
   const fields = useMemo(
@@ -221,12 +242,43 @@ export function FormRenderer({ schema, mode }: FormRendererProps) {
   const handleChange = (fieldId: string, value: FieldValue) => {
     setEntered((current) => ({ ...current, [fieldId]: value }));
     setSucceeded(false);
+    setServerErrors((current) => {
+      if (!(fieldId in current)) return current;
+      const next = { ...current };
+      delete next[fieldId];
+      return next;
+    });
   };
 
   const handleBlur = (fieldId: string) => {
     setTouched((current) =>
       current[fieldId] ? current : { ...current, [fieldId]: true },
     );
+  };
+
+  const send = async (handler: FormSubmitHandler) => {
+    // One request at a time, even on a rapid double click.
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    setFormError(null);
+    setServerErrors({});
+
+    try {
+      const result = await handler({ ...values });
+      if (result.ok) {
+        setSummary(result.summary);
+        setSucceeded(true);
+      } else {
+        setFormError(result.message);
+        setServerErrors(result.fieldErrors ?? {});
+      }
+    } catch {
+      setFormError("Unable to submit the form. Please try again.");
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+    }
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -236,6 +288,10 @@ export function FormRenderer({ schema, mode }: FormRendererProps) {
     setSubmitted(true);
 
     if (Object.keys(errors).length === 0) {
+      if (onSubmit) {
+        void send(onSubmit);
+        return;
+      }
       setSucceeded(true);
       return;
     }
@@ -253,7 +309,25 @@ export function FormRenderer({ schema, mode }: FormRendererProps) {
     setTouched({});
     setSubmitted(false);
     setSucceeded(false);
+    setSummary(null);
+    setFormError(null);
+    setServerErrors({});
   };
+
+  if (succeeded && onSubmit) {
+    return (
+      <div className="fr-success" role="status" data-mode={mode}>
+        <h2 className="fr-success-title">Response submitted</h2>
+        <p className="fr-success-text">{summary}</p>
+        <div className="fr-success-actions">
+          <button type="button" className="fb-button" onClick={reset}>
+            Submit another response
+          </button>
+          {successActions}
+        </div>
+      </div>
+    );
+  }
 
   if (succeeded) {
     return (
@@ -279,7 +353,8 @@ export function FormRenderer({ schema, mode }: FormRendererProps) {
   }
 
   const shownError = (field: FormFieldDefinition): string | undefined =>
-    submitted || touched[field.id] ? errors[field.id] : undefined;
+    serverErrors[field.id] ??
+    (submitted || touched[field.id] ? errors[field.id] : undefined);
 
   const invalidCount = fields.filter((field) => shownError(field)).length;
 
@@ -298,13 +373,19 @@ export function FormRenderer({ schema, mode }: FormRendererProps) {
         </p>
       )}
 
+      {formError && (
+        <p className="fr-summary" role="alert">
+          {formError}
+        </p>
+      )}
+
       {fields.map((field) => (
         <FieldView
           key={field.id}
           field={field}
           value={values[field.id]}
           error={shownError(field)}
-          readOnly={!interactive}
+          readOnly={!interactive || sending}
           onChange={handleChange}
           onBlur={handleBlur}
         />
@@ -312,8 +393,13 @@ export function FormRenderer({ schema, mode }: FormRendererProps) {
 
       {interactive && (
         <div className="fr-actions">
-          <button type="submit" className="fb-button fb-button-primary">
-            Submit
+          <button
+            type="submit"
+            className="fb-button fb-button-primary"
+            disabled={sending}
+            aria-busy={sending}
+          >
+            {sending ? "Submitting…" : "Submit"}
           </button>
         </div>
       )}

@@ -84,3 +84,14 @@
     width: 100%;
   }
 }
+
+.fr-success-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.fr-success-actions .fb-button {
+  text-decoration: none;
+}

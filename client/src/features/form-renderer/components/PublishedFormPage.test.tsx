@@ -5,6 +5,7 @@ import { clearAccessToken } from "../../../lib/http.ts";
 import {
   failure,
   installFetch,
+  json,
   meOk,
   ok,
   refreshOk,
@@ -68,19 +69,125 @@ describe("published preview page (Test User)", () => {
     await screen.findByLabelText(/Full name/);
   });
 
-  it("validates locally and writes nothing: no submission request is made", async () => {
+  it("validates locally first: an invalid form sends nothing", async () => {
     const net = installFetch(publishedHandler(base));
     renderApp(`/forms/${FORM_ID}/preview`);
     await screen.findByLabelText(/Full name/);
 
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
     expect(screen.getByText("Full name is required")).toBeTruthy();
+    expect(net.calls.some((c) => c.method === "POST" && c.path.includes("/submissions"))).toBe(false);
+  });
+
+  it("submits { data } only to the submissions endpoint and confirms", async () => {
+    let releaseSubmit: () => void = () => {};
+    const net = installFetch((method, path, init) => {
+      if (method === "POST" && path === `/forms/${FORM_ID}/submissions`) {
+        return new Promise<Response>((resolve) => {
+          releaseSubmit = () =>
+            resolve(
+              ok({
+                submission: {
+                  id: "665f1c2e8f1b2c3d4e5f6aaa",
+                  formId: FORM_ID,
+                  formVersionId: "665f1c2e8f1b2c3d4e5f6a99",
+                  version: 1,
+                  submittedAt: "2026-10-05T10:00:00.000Z",
+                },
+              }),
+            );
+        });
+      }
+      return publishedHandler(base)(method, path, init);
+    });
+    renderApp(`/forms/${FORM_ID}/preview`);
+    await screen.findByLabelText(/Full name/);
+
+    fireEvent.change(screen.getByLabelText(/Full name/), { target: { value: "Ada" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submitting…" }));
+
+    expect((screen.getByRole("button", { name: "Submitting…" }) as HTMLButtonElement).disabled).toBe(true);
+    releaseSubmit();
+
+    expect(await screen.findByText("Response submitted")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("4e5f6aaa");
+    expect(screen.getByRole("link", { name: "View submissions" }).getAttribute("href")).toBe(
+      `/forms/${FORM_ID}/submissions`,
+    );
+
+    const posts = net.calls.filter((c) => c.method === "POST" && c.path.includes("/submissions"));
+    expect(posts).toHaveLength(1);
+    expect(posts[0].body).toEqual({ data: { a1: "Ada" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit another response" }));
+    expect((screen.getByLabelText(/Full name/) as HTMLInputElement).value).toBe("");
+  });
+
+  it("shows the server's per-field validation errors and keeps the entered values", async () => {
+    installFetch((method, path, init) => {
+      if (method === "POST" && path === `/forms/${FORM_ID}/submissions`) {
+        return json(400, {
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "The submission is not valid",
+            fields: { a1: "Full name must be one of the allowed values" },
+          },
+        });
+      }
+      return publishedHandler(base)(method, path, init);
+    });
+    renderApp(`/forms/${FORM_ID}/preview`);
+    await screen.findByLabelText(/Full name/);
 
     fireEvent.change(screen.getByLabelText(/Full name/), { target: { value: "Ada" } });
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
-    expect(screen.getByRole("status").textContent).toContain("nothing was saved");
-    expect(net.calls.filter((c) => c.method !== "GET" && !c.path.startsWith("/auth"))).toEqual([]);
+    expect(await screen.findByText("Full name must be one of the allowed values")).toBeTruthy();
+    expect(screen.getByText("Please fix the highlighted fields and try again.")).toBeTruthy();
+    expect((screen.getByLabelText(/Full name/) as HTMLInputElement).value).toBe("Ada");
+  });
+
+  it.each([
+    [403, "FORBIDDEN", "don't have permission to submit"],
+    [404, "FORM_NOT_PUBLISHED", "no longer published"],
+    [500, "INTERNAL_SERVER_ERROR", "Unable to submit the form"],
+  ])("shows a safe message for a %i response", async (status, code, expected) => {
+    installFetch((method, path, init) => {
+      if (method === "POST" && path === `/forms/${FORM_ID}/submissions`) {
+        return failure(status, code, "Mongo exploded: secret detail");
+      }
+      return publishedHandler(base)(method, path, init);
+    });
+    renderApp(`/forms/${FORM_ID}/preview`);
+    await screen.findByLabelText(/Full name/);
+
+    fireEvent.change(screen.getByLabelText(/Full name/), { target: { value: "Ada" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(expected);
+    expect(alert.textContent).not.toContain("secret detail");
+    // The form stays usable for another attempt.
+    expect((screen.getByRole("button", { name: "Submit" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("shows a connection message when the network fails", async () => {
+    installFetch((method, path, init) => {
+      if (method === "POST" && path === `/forms/${FORM_ID}/submissions`) {
+        return Promise.reject(new TypeError("Failed to fetch"));
+      }
+      return publishedHandler(base)(method, path, init);
+    });
+    renderApp(`/forms/${FORM_ID}/preview`);
+    await screen.findByLabelText(/Full name/);
+
+    fireEvent.change(screen.getByLabelText(/Full name/), { target: { value: "Ada" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Unable to reach the server");
   });
 
   it("renders the published version, using only the published endpoint", async () => {
