@@ -12,7 +12,7 @@ import {
   renderApp,
   USER,
 } from "../../auth/testing/test-utils.tsx";
-import { TEST_USER_UNPUBLISHED_MESSAGE } from "./TestUserButton.tsx";
+import { TEST_USER_SAVE_FAILED_MESSAGE } from "./TestUserButton.tsx";
 
 beforeEach(() => {
   clearAccessToken();
@@ -71,11 +71,19 @@ describe("builder header controls", () => {
     renderApp("/");
     await screen.findByRole("heading", { name: "Form Builder" });
 
+    // The real default opener: a blank tab that is closed again if the
+    // draft cannot be saved (every form endpoint is a 404 here).
+    const win = { close: vi.fn(), location: { href: "" }, opener: {} };
+    const open = vi.spyOn(window, "open").mockReturnValue(win as unknown as Window);
+
     await userEvent.setup().click(once("Test User")[0]);
 
-    // A local, unpublished form explains why it cannot be opened.
-    expect((await screen.findByText(TEST_USER_UNPUBLISHED_MESSAGE)).textContent).toBe(
-      TEST_USER_UNPUBLISHED_MESSAGE,
+    expect((await screen.findByText(TEST_USER_SAVE_FAILED_MESSAGE)).textContent).toBe(
+      TEST_USER_SAVE_FAILED_MESSAGE,
     );
+    expect(open).toHaveBeenCalledWith("", "_blank");
+    expect(win.close).toHaveBeenCalledTimes(1);
+    expect(win.location.href).toBe("");
+    open.mockRestore();
   });
 });

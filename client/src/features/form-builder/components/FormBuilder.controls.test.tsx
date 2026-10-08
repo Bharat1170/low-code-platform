@@ -11,6 +11,12 @@ import {
   createFieldDefinition,
 } from "../utils/form-schema.utils.ts";
 import { FormBuilder } from "./FormBuilder.tsx";
+import {
+  TEST_USER_POPUP_MESSAGE,
+  TEST_USER_SAVE_FAILED_MESSAGE,
+  TEST_USER_UNSAVED_MESSAGE,
+  type PreviewWindow,
+} from "./TestUserButton.tsx";
 
 const FORM_ID = "665f1c2e8f1b2c3d4e5f6a7b";
 
@@ -33,18 +39,30 @@ type PublishFn = (formId: string) => Promise<PublishResult>;
 const mount = (props: Partial<ComponentProps<typeof FormBuilder>> = {}) => {
   const saveDraft = vi.fn<SaveFn>(() => Promise.resolve());
   const publish = vi.fn<PublishFn>(() => Promise.resolve(publishResult));
-  const openTestTab = vi.fn<(url: string) => void>();
+  const navigate = vi.fn<(url: string) => void>();
+  const close = vi.fn<() => void>();
+  const openPreviewWindow = vi.fn<() => PreviewWindow | null>(() => ({
+    navigate,
+    close,
+  }));
   render(
     <FormBuilder
       formId={FORM_ID}
       initialSchema={schemaWithField()}
       saveDraft={saveDraft}
       publish={publish}
-      openTestTab={openTestTab}
+      openPreviewWindow={openPreviewWindow}
       {...props}
     />,
   );
-  return { saveDraft, publish, openTestTab, user: userEvent.setup() };
+  return {
+    saveDraft,
+    publish,
+    openPreviewWindow,
+    navigate,
+    close,
+    user: userEvent.setup(),
+  };
 };
 
 const saveButton = () =>
@@ -180,31 +198,116 @@ describe("Publish", () => {
 });
 
 describe("Test User", () => {
-  it("opens the preview of a published form in a new tab, by id only", async () => {
-    const { openTestTab, saveDraft, publish, user } = mount({
+  it("opens the draft preview BEFORE publishing, by form id only", async () => {
+    const { openPreviewWindow, navigate, saveDraft, publish, user } = mount({
+      initialStatus: "DRAFT",
+    });
+
+    await user.click(testUserButton());
+
+    expect(openPreviewWindow).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+    expect(navigate).toHaveBeenCalledWith(`/forms/${FORM_ID}/preview`);
+    // Nothing was published, and nothing needed saving.
+    expect(publish).not.toHaveBeenCalled();
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("also works for a form that is already published", async () => {
+    const { navigate, publish, user } = mount({
       initiallyPublished: true,
       initialStatus: "PUBLISHED",
     });
 
     await user.click(testUserButton());
 
-    expect(openTestTab).toHaveBeenCalledTimes(1);
-    expect(openTestTab).toHaveBeenCalledWith(`/forms/${FORM_ID}/preview`);
-    expect(saveDraft).not.toHaveBeenCalled();
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/forms/${FORM_ID}/preview`));
     expect(publish).not.toHaveBeenCalled();
   });
 
-  it("does not open an unpublished draft and explains why", async () => {
-    const { openTestTab, saveDraft, publish, user } = mount();
+  it("opens the tab inside the click, before the save finishes", async () => {
+    let resolve!: () => void;
+    const saveDraft = vi.fn<SaveFn>(
+      () => new Promise<void>((res) => (resolve = res)),
+    );
+    const { openPreviewWindow, navigate, user } = mount({ saveDraft });
+    await addEmail(user);
+
+    fireEvent.click(testUserButton());
+
+    // Opened immediately (so pop-up blockers allow it) but not navigated yet.
+    expect(openPreviewWindow).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(1));
+    expect(navigate).not.toHaveBeenCalled();
+
+    resolve();
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/forms/${FORM_ID}/preview`));
+  });
+
+  it("saves unsaved edits first so the preview shows the current draft", async () => {
+    const { saveDraft, navigate, user } = mount();
+    await addEmail(user);
+    expect(saveDraft).not.toHaveBeenCalled();
 
     await user.click(testUserButton());
 
-    expect(openTestTab).not.toHaveBeenCalled();
-    expect(
-      screen.getByText("Publish the form before testing it as a user."),
-    ).toBeTruthy();
+    await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    expect(saveDraft.mock.calls[0][1].fields).toHaveLength(2);
+  });
+
+  it("creates the form on first use, then previews it", async () => {
+    const createForm = vi.fn<() => Promise<string>>(() => Promise.resolve("new_form_id"));
+    const { saveDraft, navigate, user } = mount({ formId: undefined, createForm });
+
+    await user.click(testUserButton());
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/forms/new_form_id/preview"));
+    expect(createForm).toHaveBeenCalledTimes(1);
+    expect(saveDraft).toHaveBeenCalledWith("new_form_id", expect.anything());
+  });
+
+  it("closes the tab and explains when the draft could not be saved", async () => {
+    const saveDraft = vi.fn<SaveFn>().mockRejectedValue(new Error("offline"));
+    const { navigate, close, user } = mount({ saveDraft });
+    await addEmail(user);
+
+    await user.click(testUserButton());
+
+    expect(await screen.findByText(TEST_USER_SAVE_FAILED_MESSAGE)).toBeTruthy();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    // The edits are kept.
+    expect(screen.getAllByRole("button", { name: /^Select / })).toHaveLength(2);
+  });
+
+  it("explains a blocked pop-up and does not save", async () => {
+    const { saveDraft, user } = mount({ openPreviewWindow: () => null });
+    await addEmail(user);
+
+    await user.click(testUserButton());
+
+    expect(await screen.findByText(TEST_USER_POPUP_MESSAGE)).toBeTruthy();
     expect(saveDraft).not.toHaveBeenCalled();
-    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it("explains that a builder with nowhere to save cannot be previewed", async () => {
+    const { openPreviewWindow, user } = mount({ formId: undefined });
+
+    await user.click(testUserButton());
+
+    expect(screen.getByText(TEST_USER_UNSAVED_MESSAGE)).toBeTruthy();
+    expect(openPreviewWindow).not.toHaveBeenCalled();
+  });
+
+  it("opens one tab for a rapid double click", async () => {
+    const { openPreviewWindow, navigate } = mount();
+
+    fireEvent.click(testUserButton());
+    fireEvent.click(testUserButton());
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+    expect(openPreviewWindow).toHaveBeenCalledTimes(1);
   });
 
   it("does not mutate the schema", async () => {

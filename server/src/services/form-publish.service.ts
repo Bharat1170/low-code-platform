@@ -15,6 +15,7 @@ import { invalidatePublishedFormCache } from "../repositories/published-form-cac
 import type { AuthContext } from "../types/auth.types.js";
 import { canonicalJson } from "../utils/canonical-json.util.js";
 import { AppError } from "../utils/errors.js";
+import { generatePublicId } from "../utils/public-id.util.js";
 import { validateSchemaForPublish } from "../validators/form-publish.validator.js";
 
 /*
@@ -166,7 +167,12 @@ export const publishForm = async (
         id,
         organizationId,
         previousVersionId,
-        { publishedVersionId: version._id, updatedBy: userId },
+        {
+          publishedVersionId: version._id,
+          updatedBy: userId,
+          // Kept if the form already has one; see markFormPublished.
+          publicId: generatePublicId(),
+        },
         dbSession,
       );
 

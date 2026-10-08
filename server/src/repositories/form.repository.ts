@@ -1,6 +1,7 @@
 import mongoose, { type ClientSession } from "mongoose";
 
 import { Form, type IForm } from "../models/form.model.js";
+import { isValidPublicId } from "../utils/public-id.util.js";
 
 /*
  * Form queries (8.17.3).
@@ -70,6 +71,16 @@ const safeObjectId = (value: unknown): mongoose.Types.ObjectId => {
 const safeString = (value: unknown): string => {
   if (typeof value !== "string") {
     throw new TypeError("Expected a string");
+  }
+
+  return value;
+};
+
+/* A publicId must be the exact generated shape before it reaches MongoDB
+ * (these updates run without schema validators). */
+const safePublicId = (value: unknown): string => {
+  if (!isValidPublicId(value)) {
+    throw new TypeError("Invalid publicId");
   }
 
   return value;
@@ -150,6 +161,8 @@ export const markFormPublished = async (
   data: {
     publishedVersionId: mongoose.Types.ObjectId;
     updatedBy: mongoose.Types.ObjectId;
+    /* Used only if the form has no publicId yet; an existing one is kept. */
+    publicId: string;
   },
   dbSession?: ClientSession,
 ): Promise<IForm | null> => {
@@ -163,15 +176,48 @@ export const markFormPublished = async (
           ? null
           : safeObjectId(expectedPublishedVersionId),
     },
-    {
-      $set: {
-        status: "PUBLISHED",
-        publishedVersionId: safeObjectId(data.publishedVersionId),
-        updatedBy: safeObjectId(data.updatedBy),
+    // Pipeline update so "keep the existing publicId, otherwise set the
+    // new one" is a single atomic step: a form's public id never changes
+    // once assigned, even under concurrent publishes.
+    [
+      {
+        $set: {
+          status: "PUBLISHED",
+          publishedVersionId: safeObjectId(data.publishedVersionId),
+          updatedBy: safeObjectId(data.updatedBy),
+          publicId: {
+            $ifNull: ["$publicId", { $literal: safePublicId(data.publicId) }],
+          },
+        },
       },
-    },
-    { new: true, session: dbSession },
+    ],
+    { new: true, session: dbSession, updatePipeline: true },
   ).exec();
+};
+
+/*
+ * Gives a published form that predates publicId its public identifier.
+ * Atomic and idempotent: only a form without one is touched, so racing
+ * callers cannot overwrite each other's value. Returns the form as it is
+ * afterwards, or null when it does not exist in the organization.
+ */
+export const assignPublicIdIfMissing = async (
+  formId: mongoose.Types.ObjectId,
+  organizationId: mongoose.Types.ObjectId,
+  publicId: string,
+): Promise<IForm | null> => {
+  const scope = {
+    _id: safeObjectId(formId),
+    organizationId: safeObjectId(organizationId),
+  };
+
+  const assigned = await Form.findOneAndUpdate(
+    { ...scope, publicId: { $exists: false } },
+    { $set: { publicId: safePublicId(publicId) } },
+    { new: true },
+  ).exec();
+
+  return assigned ?? Form.findOne(scope).exec();
 };
 
 export const findFormBySlugAndOrganization = async (

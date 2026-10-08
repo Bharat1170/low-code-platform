@@ -18,7 +18,7 @@ import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import type { FormStatusValue } from "../utils/form-status.ts";
 import { FormStatusBadge } from "./FormStatusBadge.tsx";
 import { PublishControl } from "./PublishControl.tsx";
-import { TestUserButton } from "./TestUserButton.tsx";
+import { TestUserButton, type PreviewWindow } from "./TestUserButton.tsx";
 import { SaveStatus } from "./SaveStatus.tsx";
 import "../styles/form-builder.css";
 
@@ -42,8 +42,8 @@ interface FormBuilderProps {
   createForm?: () => Promise<string>;
   /* Called once a form was created by createForm (e.g. to update the URL). */
   onFormCreated?: (formId: string) => void;
-  /* Opens the preview URL (tests); defaults to a new browser tab. */
-  openTestTab?: (url: string) => void;
+  /* Opens the Test User preview tab (tests); defaults to a new browser tab. */
+  openPreviewWindow?: () => PreviewWindow | null;
   /* Extra controls (e.g. the account menu) shown at the end of the header. */
   headerExtras?: ReactNode;
 }
@@ -57,7 +57,7 @@ export function FormBuilder({
   initialStatus,
   createForm,
   onFormCreated,
-  openTestTab,
+  openPreviewWindow,
   headerExtras,
 }: FormBuilderProps) {
   const [schema, setSchema] = useState<FormSchema>(
@@ -69,7 +69,6 @@ export function FormBuilder({
     initialStatus ?? (initiallyPublished ? "PUBLISHED" : "DRAFT"),
   );
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
-  const [hasPublished, setHasPublished] = useState(initiallyPublished);
   /* The schema that was just published, to avoid publishing it again. */
   const [publishedSchema, setPublishedSchema] = useState<FormSchema | null>(
     null,
@@ -109,7 +108,6 @@ export function FormBuilder({
   const handlePublished = (result: PublishResult) => {
     setFormStatus("PUBLISHED");
     setPublishedVersion(result.version);
-    setHasPublished(true);
     setPublishedSchema(schema);
   };
 
@@ -170,9 +168,10 @@ export function FormBuilder({
             }
           />
           <TestUserButton
-            formId={effectiveFormId}
-            published={hasPublished}
-            openTab={openTestTab}
+            prepare={
+              createForm || formId !== undefined ? ensureSavedForPublish : undefined
+            }
+            openWindow={openPreviewWindow}
           />
           {headerExtras}
         </div>

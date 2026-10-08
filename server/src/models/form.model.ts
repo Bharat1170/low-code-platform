@@ -15,6 +15,9 @@ export interface IForm extends Document {
   description: string;
   slug: string;
   status: FormStatus;
+  // Random share-link identifier, assigned server-side the first time the
+  // form is published. Never client-writable.
+  publicId?: string;
   // FormVersion does not exist yet; these are plain ObjectId fields.
   // The single mutable builder draft (validated FormSchema, plain JSON).
   // Autosave overwrites it in place; versions are a later step.
@@ -69,6 +72,14 @@ const formSchema = new Schema<IForm>(
       required: true,
     },
 
+    publicId: {
+      type: String,
+      trim: true,
+      minlength: 24,
+      maxlength: 24,
+      match: /^[A-Za-z0-9_-]{24}$/,
+    },
+
     draftSchema: {
       type: Schema.Types.Mixed,
     },
@@ -110,6 +121,10 @@ formSchema.index(
     unique: true,
   },
 );
+
+// A publicId is globally unique (it is looked up without a tenant) but
+// only forms that have been published have one, hence sparse.
+formSchema.index({ publicId: 1 }, { unique: true, sparse: true });
 
 // Query pattern: forms of a project within an organization.
 formSchema.index({

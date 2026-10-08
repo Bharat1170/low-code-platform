@@ -334,8 +334,8 @@ export function FormRenderer({
       <div className="fr-success" role="status" data-mode={mode}>
         <h2 className="fr-success-title">Everything looks good</h2>
         <p className="fr-success-text">
-          Your answers passed validation. Submissions are not enabled yet, so
-          nothing was saved or sent.
+          Your answers passed validation. This was only a test, so nothing was
+          saved or sent.
         </p>
         <button type="button" className="fb-button" onClick={reset}>
           Start over

@@ -7,7 +7,7 @@ import { PublicOnly } from "./features/auth/routing/PublicOnly.tsx";
 import { RequireAuth } from "./features/auth/routing/RequireAuth.tsx";
 import { createDraftForm } from "./features/form-builder/api/forms.api.ts";
 import { FormBuilder } from "./features/form-builder/components/FormBuilder.tsx";
-import { PublishedFormPage } from "./features/form-renderer/components/PublishedFormPage.tsx";
+import { DraftPreviewPage } from "./features/form-renderer/components/DraftPreviewPage.tsx";
 import { SubmissionDetailsPage } from "./features/submissions/pages/SubmissionDetailsPage.tsx";
 import { SubmissionsPage } from "./features/submissions/pages/SubmissionsPage.tsx";
 import { FormBuilderPage } from "./features/form-builder/components/FormBuilderPage.tsx";
@@ -65,7 +65,7 @@ function App() {
       </Route>
       <Route element={<RequireAuth />}>
         <Route path="/" element={<BuilderRoute />} />
-        <Route path="/forms/:formId/preview" element={<PublishedFormPage />} />
+        <Route path="/forms/:formId/preview" element={<DraftPreviewPage />} />
         <Route path="/forms/:formId/submissions" element={<SubmissionsPage />} />
         <Route
           path="/forms/:formId/submissions/:submissionId"

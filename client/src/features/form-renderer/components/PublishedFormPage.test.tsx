@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearAccessToken } from "../../../lib/http.ts";
+import { AuthProvider } from "../../auth/context/AuthProvider.tsx";
+import { RequireAuth } from "../../auth/routing/RequireAuth.tsx";
 import {
   failure,
   installFetch,
@@ -9,11 +12,31 @@ import {
   meOk,
   ok,
   refreshOk,
-  renderApp,
   type Handler,
 } from "../../auth/testing/test-utils.tsx";
+import { SubmissionsPage } from "../../submissions/pages/SubmissionsPage.tsx";
+import { PublishedFormPage } from "./PublishedFormPage.tsx";
 
 const FORM_ID = "665f1c2e8f1b2c3d4e5f6a7b";
+
+/*
+ * PublishedFormPage (the owner's view of the PUBLISHED version) is no
+ * longer behind /forms/:formId/preview, which now previews the draft. It is
+ * mounted on its own route here so its behavior stays covered.
+ */
+const renderApp = (entry: string) =>
+  render(
+    <MemoryRouter initialEntries={[entry]}>
+      <AuthProvider>
+        <Routes>
+          <Route element={<RequireAuth />}>
+            <Route path="/forms/:formId/preview" element={<PublishedFormPage />} />
+            <Route path="/forms/:formId/submissions" element={<SubmissionsPage />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </MemoryRouter>,
+  );
 
 beforeEach(() => {
   clearAccessToken();

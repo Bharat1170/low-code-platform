@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 import {
+  assignPublicIdIfMissing,
   createForm as createFormRecord,
   deleteFormByIdAndOrganization,
   findFormByIdAndOrganization,
@@ -24,6 +25,7 @@ import type {
 import { invalidatePublishedFormCache } from "../repositories/published-form-cache.repository.js";
 
 import { AppError } from "../utils/errors.js";
+import { generatePublicId } from "../utils/public-id.util.js";
 
 /*
  * Form service (8.17.4).
@@ -138,36 +140,57 @@ export const listForms = async (
   });
 };
 
+/*
+ * A form published before publicId existed gets its identifier the first
+ * time its owner reads it. The write is atomic and idempotent (only a
+ * form without one is touched), so concurrent reads cannot disagree.
+ */
+const ensurePublicId = async (
+  form: IForm,
+  organizationId: mongoose.Types.ObjectId,
+): Promise<IForm> => {
+  if (form.publishedVersionId === undefined || form.publicId !== undefined) {
+    return form;
+  }
+
+  const updated = await assignPublicIdIfMissing(
+    form._id as mongoose.Types.ObjectId,
+    organizationId,
+    generatePublicId(),
+  );
+
+  return updated ?? form;
+};
+
 export const getFormById = async (
   auth: AuthContext,
   formId: string,
 ): Promise<IForm> => {
+  const organizationId = toOrganizationId(auth);
   const form = await findFormByIdAndOrganization(
     new mongoose.Types.ObjectId(formId),
-    toOrganizationId(auth),
+    organizationId,
   );
 
   if (!form) {
     throw formNotFound();
   }
 
-  return form;
+  return ensurePublicId(form, organizationId);
 };
 
 export const getFormBySlug = async (
   auth: AuthContext,
   slug: string,
 ): Promise<IForm> => {
-  const form = await findFormBySlugAndOrganization(
-    slug,
-    toOrganizationId(auth),
-  );
+  const organizationId = toOrganizationId(auth);
+  const form = await findFormBySlugAndOrganization(slug, organizationId);
 
   if (!form) {
     throw formNotFound();
   }
 
-  return form;
+  return ensurePublicId(form, organizationId);
 };
 
 export const updateForm = async (
