@@ -59,3 +59,20 @@ export const FIELD_TYPE_LABELS: Record<string, string> = {
   CHECKBOX: "Checkbox",
   DATE: "Date",
 };
+
+/* Safe, user-facing text for a failed delete; never the backend's message. */
+export const deleteErrorMessage = (error: unknown): string => {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "Your session has expired. Please sign in again.";
+    if (error.status === 403) {
+      return "You don't have permission to delete submissions for this form.";
+    }
+    if (error.status === 404) return "This submission no longer exists.";
+    if (error.status === 429) return "Too many requests. Please wait a moment and try again.";
+    if (error.status === 0) {
+      return "Unable to reach the server. Check your connection and try again.";
+    }
+  }
+
+  return "Unable to delete the submission. Please try again.";
+};

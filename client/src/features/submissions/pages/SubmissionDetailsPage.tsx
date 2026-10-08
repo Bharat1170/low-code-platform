@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   getSubmission,
   type SubmissionDetails,
 } from "../api/submissions.api.ts";
+import { DeleteSubmissionDialog } from "../components/DeleteSubmissionDialog.tsx";
 import {
   FIELD_TYPE_LABELS,
   displayValue,
@@ -30,6 +31,8 @@ export function SubmissionDetailsPage() {
     submissionId: string;
   }>();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [state, setState] = useState<State>({ kind: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -120,6 +123,13 @@ export function SubmissionDetailsPage() {
             <p className="sub-subtitle">{submission.formName}</p>
           )}
         </div>
+        <button
+          type="button"
+          className="fb-button"
+          onClick={() => setConfirmingDelete(true)}
+        >
+          Delete
+        </button>
       </header>
 
       <section className="sub-card" aria-label="Submission details">
@@ -183,6 +193,26 @@ export function SubmissionDetailsPage() {
           <p className="sub-note">This submission has no field values.</p>
         )}
       </section>
+
+      {confirmingDelete && (
+        <DeleteSubmissionDialog
+          formId={formId}
+          submissionId={submission.id}
+          label={shortId(submission.id)}
+          onClose={() => setConfirmingDelete(false)}
+          onDeleted={(outcome) =>
+            navigate(backTo, {
+              replace: true,
+              state: {
+                notice:
+                  outcome === "deleted"
+                    ? "Submission deleted."
+                    : "That submission no longer exists.",
+              },
+            })
+          }
+        />
+      )}
     </div>
   );
 }

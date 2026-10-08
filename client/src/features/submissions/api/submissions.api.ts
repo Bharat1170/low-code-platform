@@ -181,3 +181,17 @@ export const getSubmission = async (
     schema: isFormSchema(sub.schema) ? sub.schema : null,
   };
 };
+
+/*
+ * Permanently deletes one submission. Success carries no data; any
+ * failure is thrown as an ApiError by the shared HTTP layer.
+ */
+export const deleteSubmission = async (
+  formId: string,
+  submissionId: string,
+): Promise<void> => {
+  await authorizedRequest(
+    `/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`,
+    { method: "DELETE" },
+  );
+};

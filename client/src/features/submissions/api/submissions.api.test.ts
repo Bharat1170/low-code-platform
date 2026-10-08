@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearAccessToken } from "../../../lib/http.ts";
-import { ApiError, getSubmission, listSubmissions } from "./submissions.api.ts";
+import { ApiError, deleteSubmission, getSubmission, listSubmissions } from "./submissions.api.ts";
 
 const FORM_ID = "665f1c2e8f1b2c3d4e5f6a7b";
 const SUB_ID = "665f1c2e8f1b2c3d4e5f6aaa";
@@ -158,5 +158,31 @@ describe("getSubmission", () => {
     );
 
     await expect(getSubmission(FORM_ID, SUB_ID)).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("deleteSubmission", () => {
+  it("sends DELETE to the form's submission path with credentials and a bearer token", async () => {
+    fetchMock.mockResolvedValueOnce(refreshOk());
+    fetchMock.mockResolvedValueOnce(json(200, { success: true, message: "ok" }));
+
+    await expect(deleteSubmission(FORM_ID, SUB_ID)).resolves.toBeUndefined();
+
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url).toMatch(new RegExp(`/forms/${FORM_ID}/submissions/${SUB_ID}$`));
+    expect(init.method).toBe("DELETE");
+    expect(init.credentials).toBe("include");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok");
+    expect(init.body).toBeUndefined();
+  });
+
+  it("encodes ids and surfaces API errors", async () => {
+    fetchMock.mockResolvedValueOnce(refreshOk());
+    fetchMock.mockResolvedValueOnce(
+      json(403, { success: false, error: { code: "FORBIDDEN", message: "x", fields: {} } }),
+    );
+
+    await expect(deleteSubmission("a/b", "c?d")).rejects.toBeInstanceOf(ApiError);
+    expect((fetchMock.mock.calls[1] as [string])[0]).toContain("/forms/a%2Fb/submissions/c%3Fd");
   });
 });

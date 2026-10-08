@@ -297,3 +297,27 @@
     transition: none;
   }
 }
+
+.sub-danger,
+.sub-danger:hover:not(:disabled) {
+  border-color: var(--builder-danger);
+  background: var(--builder-danger);
+  color: #fff;
+}
+
+.sub-danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.sub-notice {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--builder-border);
+  border-radius: var(--builder-radius-sm);
+  background: var(--builder-surface);
+  font-size: 14px;
+}
+
+.sub-actions .fb-button + .fb-button {
+  margin-left: 8px;
+}

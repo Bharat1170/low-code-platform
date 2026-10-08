@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { fetchForm } from "../../form-builder/api/forms.api.ts";
 import {
   listSubmissions,
   type SubmissionList,
 } from "../api/submissions.api.ts";
+import { DeleteSubmissionDialog } from "../components/DeleteSubmissionDialog.tsx";
 import {
   formatDateTime,
   shortId,
@@ -40,9 +41,16 @@ const readDate = (value: string | null): string | undefined =>
 export function SubmissionsPage() {
   const { formId = "" } = useParams<{ formId: string }>();
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const [state, setState] = useState<State>({ kind: "loading" });
   const [formName, setFormName] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  // Feedback from a delete here or on the details page (via router state).
+  const [notice, setNotice] = useState<string | null>(() => {
+    const value = (location.state as { notice?: unknown } | null)?.notice;
+    return typeof value === "string" ? value : null;
+  });
 
   const page = readPage(params.get("page"));
   const version = readVersion(params.get("version"));
@@ -99,6 +107,43 @@ export function SubmissionsPage() {
     };
   }, [requestKey, formId, page, version, from, to, reloadKey]);
 
+  /*
+ * After a delete: keep the filters, and if the current page no longer
+ * exists (it only held the deleted item) step back to the last valid one.
+ */
+  const afterDelete = (outcome: "deleted" | "already-gone") => {
+    setPendingDelete(null);
+    setNotice(
+      outcome === "deleted"
+        ? "Submission deleted."
+        : "That submission no longer exists. The list has been refreshed.",
+    );
+
+    if (state.kind === "ready" && state.list.items.length === 1 && page > 1) {
+      const merged = new URLSearchParams(params);
+      merged.set("page", String(page - 1));
+      setParams(merged);
+      return;
+    }
+
+    setReloadKey((key) => key + 1);
+  };
+
+  // A page past the end (e.g. after other deletions) moves to the last page.
+  useEffect(() => {
+    if (
+      state.kind === "ready" &&
+      state.key === requestKey &&
+      state.list.items.length === 0 &&
+      page > 1 &&
+      state.list.pagination.total > 0
+    ) {
+      const merged = new URLSearchParams(params);
+      merged.set("page", String(state.list.pagination.totalPages));
+      setParams(merged, { replace: true });
+    }
+  }, [state, requestKey, page, params, setParams]);
+
   const go = (next: Record<string, string | undefined>) => {
     const merged = new URLSearchParams(params);
     for (const [key, value] of Object.entries(next)) {
@@ -147,6 +192,12 @@ export function SubmissionsPage() {
           {formName && <p className="sub-subtitle">{formName}</p>}
         </div>
       </header>
+
+      {notice && (
+        <p className="sub-notice" role="status">
+          {notice}
+        </p>
+      )}
 
       <form className="sub-filters" onSubmit={applyFilters} aria-label="Filter submissions">
         <label className="sub-filter">
@@ -270,6 +321,17 @@ export function SubmissionsPage() {
                       >
                         View
                       </Link>
+                      <button
+                        type="button"
+                        className="fb-button"
+                        onClick={() => {
+                          setNotice(null);
+                          setPendingDelete(item.id);
+                        }}
+                        aria-label={`Delete submission ${shortId(item.id)}`}
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -304,6 +366,16 @@ export function SubmissionsPage() {
             </div>
           </nav>
         </>
+      )}
+
+      {pendingDelete !== null && (
+        <DeleteSubmissionDialog
+          formId={formId}
+          submissionId={pendingDelete}
+          label={shortId(pendingDelete)}
+          onClose={() => setPendingDelete(null)}
+          onDeleted={afterDelete}
+        />
       )}
     </div>
   );
