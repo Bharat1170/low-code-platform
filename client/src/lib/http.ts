@@ -9,7 +9,7 @@
 
 export const API_BASE_URL: string =
   (import.meta.env.VITE_API_URL as string | undefined) ??
-  "http://localhost:5000/api";
+  "https://low-code-platform-server.vercel.app/api";
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
